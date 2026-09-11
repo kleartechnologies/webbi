@@ -2,7 +2,8 @@
  * Site visual presets from the Webbi design system. A site picks one preset;
  * the renderer exposes it as CSS variables (--site-accent, --site-font, …).
  */
-export type PresetId = "warm" | "elegant" | "bold" | "trust" | "bright";
+export const PRESET_IDS = ["warm", "elegant", "bold", "trust", "bright"] as const;
+export type PresetId = (typeof PRESET_IDS)[number];
 
 export interface Preset {
   id: PresetId;
@@ -93,8 +94,6 @@ export const PRESETS: Record<PresetId, Preset> = {
     fontLabel: "Plus Jakarta Sans",
   },
 };
-
-export const PRESET_IDS = Object.keys(PRESETS) as PresetId[];
 
 /** Inline style object that scopes a preset to a subtree. */
 export function presetStyle(preset: Preset, accentOverride?: string): Record<string, string> {
