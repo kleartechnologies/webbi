@@ -1,5 +1,5 @@
 import type { Timestamp } from "firebase/firestore";
-import type { Language, SiteContent, Understanding } from "./schema";
+import type { GenerationInput, Language, SiteContent, Understanding } from "./schema";
 
 export type SiteStatus = "draft" | "published";
 
@@ -13,6 +13,8 @@ export type GenerationStatus =
 export interface GenerationState {
   status: GenerationStatus;
   understanding?: Understanding;
+  /** Owner-confirmed details (Confirm + Content screens). */
+  input?: GenerationInput;
   /** User-facing message when status === "error". */
   error?: string;
   model?: string;

@@ -229,8 +229,8 @@ export const understandingSchema = z.object({
   tagline: short(120).optional(),
   area: short(80).optional(),
   whatsapp: whatsappSchema.optional(),
-  /** Short names of things the business sells or offers, as mentioned. */
-  offerings: z.array(short(80)).max(16),
+  /** Things the business sells or offers, exactly as mentioned (prices only if stated). */
+  offerings: z.array(z.object({ name: short(80).min(1), price: short(40).optional() })).max(16),
   /** Selling points mentioned by the owner (never invented). */
   highlights: z.array(short(80)).max(6),
   ctaLabel: short(40),
@@ -239,6 +239,25 @@ export const understandingSchema = z.object({
   summary: short(300),
 });
 export type Understanding = z.infer<typeof understandingSchema>;
+
+/** What the owner confirmed/added on the Confirm and Content screens. */
+export const generationInputSchema = z.object({
+  category: z.enum(CATEGORY_IDS),
+  name: short(80).min(1),
+  tagline: short(120).optional(),
+  whatsapp: whatsappSchema,
+  area: short(80).optional(),
+  address: short(240).optional(),
+  hours: short(120).optional(),
+  instagram: short(120).optional(),
+  facebook: short(120).optional(),
+  tiktok: short(120).optional(),
+  offerings: z
+    .array(z.object({ id, name: short(80).min(1), price: short(40).optional(), image: imageSchema.optional() }))
+    .max(40),
+  photos: z.array(imageSchema).max(24),
+});
+export type GenerationInput = z.infer<typeof generationInputSchema>;
 
 export function newId(prefix = "s"): string {
   const rand =

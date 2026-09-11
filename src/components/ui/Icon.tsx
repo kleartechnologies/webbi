@@ -1,4 +1,4 @@
-import { ICON_PATHS, ICON_PATHS_FILL, type IconName } from "./icons.generated";
+import { ICON_GRID_24, ICON_PATHS, ICON_PATHS_FILL, type IconName } from "./icons.generated";
 
 export type { IconName };
 
@@ -20,7 +20,7 @@ export function Icon({ name, size = 24, fill = false, className, title }: IconPr
     <svg
       width={size}
       height={size}
-      viewBox="0 -960 960 960"
+      viewBox={ICON_GRID_24.has(name) ? "0 0 24 24" : "0 -960 960 960"}
       fill="currentColor"
       aria-hidden={title ? undefined : true}
       role={title ? "img" : undefined}

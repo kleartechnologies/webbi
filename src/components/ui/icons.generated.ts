@@ -161,3 +161,6 @@ export const ICON_PATHS_FILL = {
 } as const;
 
 export type IconName = keyof typeof ICON_PATHS;
+
+/** Icons whose path data is on the legacy 24-unit grid (viewBox "0 0 24 24"). */
+export const ICON_GRID_24: ReadonlySet<string> = new Set(["auto_awesome"]);
