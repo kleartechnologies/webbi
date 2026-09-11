@@ -1,0 +1,25 @@
+rules_version = '2';
+
+// Webbi Storage rules.
+//
+// Files live under users/{uid}/sites/{siteId}/{fileName}. Only the owner can
+// upload or delete, uploads must be images under 8 MB. Reads through the rules
+// are owner-only; the app renders images through Firebase download URLs, which
+// carry an unguessable token and work for published sites without exposing
+// the bucket to listing or guessing.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /users/{uid}/sites/{siteId}/{fileName} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

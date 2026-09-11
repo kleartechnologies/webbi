@@ -1,0 +1,13 @@
+# Netlify build configuration for Webbi (Next.js 16, App Router).
+# The Next.js runtime (@netlify/plugin-nextjs) turns route handlers and
+# server components into Netlify Functions automatically.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

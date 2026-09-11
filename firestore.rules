@@ -1,0 +1,88 @@
+rules_version = '2';
+
+// Webbi Firestore rules.
+//
+// Collections
+//   users/{uid}         – minimal profile, owner only.
+//   sites/{siteId}      – one document per website. Owner reads it and may edit
+//                         the draft content. Status, slug, payment and the
+//                         published copy are written only by the server
+//                         (Admin SDK) after verified payment.
+//   publicSites/{slug}  – the published copy of a site. World-readable, server
+//                         written. This is the only collection the public
+//                         renderer (/w/[slug]) reads.
+//   slugs/{slug}        – slug registry, server only.
+//   payments/{id}       – payment records, server written, owner readable.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(doc) {
+      return signedIn() && doc.data.ownerUid == request.auth.uid;
+    }
+
+    function isString(v, max) {
+      return v is string && v.size() <= max;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(
+             ['displayName', 'email', 'locale', 'createdAt', 'updatedAt']);
+      allow delete: if false;
+    }
+
+    match /sites/{siteId} {
+      allow read: if isOwner(resource);
+
+      // A client may only ever create an unpaid, unpublished draft it owns.
+      allow create: if signedIn()
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.status == 'draft'
+        && request.resource.data.paid == false
+        && request.resource.data.slug == null
+        && request.resource.data.published == null
+        && isString(request.resource.data.sourceDescription, 4000)
+        && request.resource.data.keys().hasOnly(
+             ['ownerUid', 'status', 'paid', 'paidAt', 'slug', 'published',
+              'publishedAt', 'draft', 'sourceDescription', 'generation',
+              'language', 'createdAt', 'updatedAt']);
+
+      // Editing is limited to the draft content and its bookkeeping fields.
+      // ownerUid, status, paid, slug and published can never be changed here.
+      allow update: if isOwner(resource)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+             ['draft', 'sourceDescription', 'generation', 'language', 'updatedAt'])
+        && isString(request.resource.data.sourceDescription, 4000);
+
+      // Only unpaid drafts can be deleted by their owner.
+      allow delete: if isOwner(resource)
+        && resource.data.status == 'draft'
+        && resource.data.paid == false;
+    }
+
+    match /publicSites/{slug} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /slugs/{slug} {
+      allow read, write: if false;
+    }
+
+    match /payments/{paymentId} {
+      allow read: if isOwner(resource);
+      allow write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
