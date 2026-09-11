@@ -34,7 +34,7 @@ export function resumePath(site: Site): string {
     case "generating":
       return `${base}/generating`;
     case "ready":
-      return site.draft ? `${base}/edit` : `${base}/confirm`;
+      return site.draft ? `${base}/ready` : `${base}/confirm`;
     default:
       return `${base}/confirm`;
   }

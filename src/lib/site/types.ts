@@ -50,3 +50,16 @@ export interface UserDoc {
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }
+
+/**
+ * Firestore document at publicSites/{slug}: the live copy of a site. World
+ * readable, written only by the server after verified payment.
+ */
+export interface PublicSiteDoc {
+  siteId: string;
+  ownerUid: string;
+  slug: string;
+  content: SiteContent;
+  publishedAt: Timestamp;
+  updatedAt: Timestamp;
+}

@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { fontVariables } from "@/lib/fonts";
 import { publicEnv } from "@/lib/env";
-import { AuthProvider } from "@/lib/auth/AuthProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -26,7 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${fontVariables} h-full`}>
       <body className="min-h-full flex flex-col bg-ground text-ink font-ui">
-        <AuthProvider>{children}</AuthProvider>
+        {children}
       </body>
     </html>
   );

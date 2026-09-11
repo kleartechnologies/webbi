@@ -1,0 +1,7 @@
+Demo photos for the "Rasa Kampung" example site. All CC0 / public domain from Wikimedia Commons.
+nasi-lemak.jpg        https://commons.wikimedia.org/wiki/File:Nasi_Lemak_-_Roti_King_2025-09-19.jpg
+rendang.jpg           https://commons.wikimedia.org/wiki/File:Rendang_Rasa.jpg
+beef-rendang.jpg      https://commons.wikimedia.org/wiki/File:Beef_Rendang..JPG
+ayam-masak-merah.jpg  https://commons.wikimedia.org/wiki/File:Ayam_masak_merah.jpg
+kuih-lapis.jpg        https://commons.wikimedia.org/wiki/File:Kuih_Lapis_(_Malaysia_dessert_).jpg
+kuih-lompang.jpg      https://commons.wikimedia.org/wiki/File:Kuih_lompang_20230924_141321.jpg

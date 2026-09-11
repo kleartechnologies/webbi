@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ButtonLink, Icon, type IconName } from "@/components/ui";
 import { CATEGORIES } from "@/lib/site/categories";
 import { PRESETS } from "@/lib/site/presets";
@@ -68,6 +69,7 @@ const EXAMPLE_CHIPS = [
 ];
 
 interface ExampleCard {
+  slug: string;
   name: string;
   kind: string;
   cta: string;
@@ -85,6 +87,7 @@ interface ExampleCard {
 
 const EXAMPLES: ExampleCard[] = [
   {
+    slug: "rasa-kampung",
     name: "Rasa Kampung",
     kind: "Restaurant",
     cta: CATEGORIES.restaurant.cta,
@@ -100,6 +103,7 @@ const EXAMPLES: ExampleCard[] = [
     overlay: true,
   },
   {
+    slug: "hafiz-rahman",
     name: "Hafiz Rahman",
     kind: "Car sales advisor",
     cta: CATEGORIES.car.cta,
@@ -113,6 +117,7 @@ const EXAMPLES: ExampleCard[] = [
     titleColor: "#fff",
   },
   {
+    slug: "sereni",
     name: "Sereni",
     kind: "Beauty studio",
     cta: CATEGORIES.beauty.cta,
@@ -126,6 +131,7 @@ const EXAMPLES: ExampleCard[] = [
     titleColor: PRESETS.elegant.ink,
   },
   {
+    slug: "sejuktech",
     name: "SejukTech",
     kind: "Aircond services",
     cta: CATEGORIES.homeServices.cta,
@@ -163,8 +169,10 @@ export function Examples() {
         </div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-[14px]">
           {EXAMPLES.map((e) => (
-            <div
+            <Link
               key={e.name}
+              href={`/w/${e.slug}`}
+              aria-label={`See the ${e.name} example`}
               className="flex flex-col overflow-hidden rounded-panel border border-line transition-colors hover:border-ink"
               style={{ background: e.ground }}
             >
@@ -188,8 +196,12 @@ export function Examples() {
                   <Icon name={e.ctaIcon} size={16} fill={e.ctaFill} />
                   {e.cta}
                 </span>
+                <span className="flex items-center gap-1 pt-1 text-[13px] font-semibold text-muted">
+                  See example
+                  <Icon name="arrow_forward" size={16} />
+                </span>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </div>

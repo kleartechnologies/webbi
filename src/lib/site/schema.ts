@@ -22,8 +22,11 @@ export const whatsappSchema = z
   .string()
   .regex(/^\d{9,15}$/, "Enter a valid mobile number");
 
+/** Absolute https URL (Storage) or a root-relative path (bundled demo photos). */
+const imageUrlSchema = z.union([z.url(), z.string().regex(/^\/[^\s]+$/)]);
+
 export const imageSchema = z.object({
-  url: z.url(),
+  url: imageUrlSchema,
   /** Firebase Storage object path (owner uploads only). */
   path: short(400).optional(),
   alt: short(200).optional(),

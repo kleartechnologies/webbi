@@ -33,15 +33,6 @@
   --color-danger: #b4472b;
   --color-danger-tint: #fbeae5;
 
-  /* Site preset palette. The renderer sets the --site-* variables per site. */
-  --color-site-accent: var(--site-accent);
-  --color-site-accent-alt: var(--site-accent-alt);
-  --color-site-ink: var(--site-ink);
-  --color-site-ground: var(--site-ground);
-  --color-site-line: var(--site-line);
-  --color-site-muted: var(--site-muted);
-  --font-site: var(--site-font);
-
   /* Type scale: size / line-height / letter-spacing */
   --text-display: 44px;
   --text-display--line-height: 1.05;
@@ -83,6 +74,21 @@
   --breakpoint-sm: 600px;
   --breakpoint-md: 768px;
   --breakpoint-lg: 1024px;
+}
+
+/*
+  Site preset palette. The renderer sets the --site-* variables per site root,
+  so these must be inlined into the utilities (a plain @theme alias would
+  resolve once at :root and ignore the per-site override).
+*/
+@theme inline {
+  --color-site-accent: var(--site-accent);
+  --color-site-accent-alt: var(--site-accent-alt);
+  --color-site-ink: var(--site-ink);
+  --color-site-ground: var(--site-ground);
+  --color-site-line: var(--site-line);
+  --color-site-muted: var(--site-muted);
+  --font-site: var(--site-font);
 }
 
 :root {
