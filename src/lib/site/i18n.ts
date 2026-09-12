@@ -29,6 +29,8 @@ const STRINGS = {
     buildYours: "Build yours",
     from: "From",
     closed: "Closed",
+    follow: "Follow",
+    socialMedia: "Social media",
     kinds: {
       products: "Products",
       services: "Services",
@@ -64,6 +66,8 @@ const STRINGS = {
     buildYours: "Bina milik anda",
     from: "Dari",
     closed: "Tutup",
+    follow: "Ikuti",
+    socialMedia: "Media sosial",
     kinds: {
       products: "Produk",
       services: "Perkhidmatan",

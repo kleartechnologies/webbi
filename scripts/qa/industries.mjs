@@ -1,6 +1,9 @@
 // Runs six realistic Malaysian business descriptions through the real onboarding flow
 // (/start → confirm → content → generating → ready) and reports what the AI understood
 // and generated for each. Works with AI_PROVIDER=mock (structure check) or a real key.
+// Phase 12: four of them also upload a cover photo plus a logo (business-led) or a
+// profile photo (person-led), type social handles on the confirm step, and check the
+// hero layout, header logo and social icons in the ready preview (mobile + desktop).
 //
 //   npm run qa:industries
 //
@@ -12,19 +15,26 @@ import puppeteer from "puppeteer-core";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { profilePhotoInput, writeAvatarPng } from "./lib.mjs";
+import { imageInput, writeAvatarPng, writeCoverPng, writeLogoPng } from "./lib.mjs";
 
 const base = (process.env.QA_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 const chrome = process.env.QA_CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const shots = path.join(path.dirname(fileURLToPath(import.meta.url)), "shots");
 mkdirSync(shots, { recursive: true });
 const avatar = writeAvatarPng(path.join(shots, "qa-avatar.png"));
+const cover = writeCoverPng(path.join(shots, "qa-cover.png"));
+const logoPng = writeLogoPng(path.join(shots, "qa-logo.png"));
 
 const INDUSTRIES = [
   {
     key: "restaurant",
     expectCategory: "restaurant",
     ctaFamily: /order|pesan|tempah/i,
+    heroMode: "visual",
+    logo: true,
+    hero: true,
+    socials: { instagram: "@warungmaknah", facebook: "https://www.facebook.com/warungmaknah" },
+    expectSocials: { instagram: "https://www.instagram.com/warungmaknah/", facebook: "https://www.facebook.com/warungmaknah" },
     description:
       "Saya buka kedai makan Warung Mak Nah di Kajang. Jual nasi lemak, mee goreng dan lauk kampung, semua halal dan masak sendiri. Buka 7 pagi sampai 3 petang. Customer biasa order ikut WhatsApp 012-345 6789.",
   },
@@ -37,6 +47,11 @@ const INDUSTRIES = [
     mustKeep: ["Axia", "Bezza", "Myvi", "Ativa", "Alza", "Aruz"],
     address: "No. 9257C, Jalan Balakong, 43300 Balakong, Selangor (berdekatan kawasan Amerin Mall)",
     profilePhoto: true,
+    heroMode: "person",
+    hero: true,
+    desktop: true,
+    socials: { instagram: "@amir.perodua", tiktok: "@amir.perodua" },
+    expectSocials: { instagram: "https://www.instagram.com/amir.perodua/", tiktok: "https://www.tiktok.com/@amir.perodua" },
     description: `Saya Amir, seorang Sales Advisor Perodua di Balakong.
 
 Saya bantu customer cari kereta Perodua baru yang sesuai dengan bajet mereka. Saya boleh bantu urus loan, trade-in dan pendaftaran kereta.
@@ -52,6 +67,11 @@ Saya cover kawasan Balakong, Cheras, Kajang dan Seri Kembangan.`,
     expectCategory: "property",
     personLed: true,
     ctaFamily: /enquir|tanya|property|hartanah/i,
+    heroMode: "property",
+    profilePhoto: true,
+    hero: true,
+    socials: { instagram: "https://instagram.com/sarahlim.homes", facebook: "sarahlimhomes", tiktok: "https://www.tiktok.com/@sarahlim.homes" },
+    expectSocials: { instagram: "https://www.instagram.com/sarahlim.homes/", facebook: "https://www.facebook.com/sarahlimhomes", tiktok: "https://www.tiktok.com/@sarahlim.homes" },
     description:
       "I'm Sarah Lim, a registered real estate negotiator with IQI in Petaling Jaya. I help families buy, sell and rent condos and landed homes around PJ, Damansara and Subang Jaya. Free valuation, WhatsApp me to enquire.",
   },
@@ -59,6 +79,11 @@ Saya cover kawasan Balakong, Cheras, Kajang dan Seri Kembangan.`,
     key: "homeServices",
     expectCategory: "homeServices",
     ctaFamily: /quot|sebut harga|harga/i,
+    heroMode: "service",
+    logo: true,
+    hero: true,
+    socials: { facebook: "ZulRenovation", tiktok: "zul.renovation" },
+    expectSocials: { facebook: "https://www.facebook.com/ZulRenovation", tiktok: "https://www.tiktok.com/@zul.renovation" },
     description:
       "Kami buat renovation, plumbing dan wiring untuk rumah area Shah Alam dan Klang. 12 tahun experience, harga berpatutan, free quotation. Kitchen cabinet dari RM3,500. Contact Zul untuk quote.",
   },
@@ -66,6 +91,7 @@ Saya cover kawasan Balakong, Cheras, Kajang dan Seri Kembangan.`,
     key: "beauty",
     expectCategory: "beauty",
     ctaFamily: /book|appointment|tempah|janji/i,
+    heroMode: "visual",
     description:
       "Salon Ayu Beauty kat Bangi. Kami buat haircut, hair colour, rebonding, facial dan bridal makeup. Ladies only, ada ruang solat. Booking through WhatsApp je 011-2345 6789.",
   },
@@ -74,6 +100,7 @@ Saya cover kawasan Balakong, Cheras, Kajang dan Seri Kembangan.`,
     expectCategory: "photographer",
     personLed: true,
     ctaFamily: /availab|kekosongan|tarikh|book/i,
+    heroMode: "person",
     description:
       "Hi, I'm Danial, a freelance wedding and event photographer based in Johor Bahru. I shoot weddings, engagements and corporate events across Johor and Singapore. Packages from RM1,200. Check my availability on WhatsApp.",
   },
@@ -165,12 +192,20 @@ for (const industry of selected) {
     check(form.category === industry.expectCategory, `confirm form pre-selected category ${form.category}`);
     check(Boolean(form.name), `confirm form has a name: ${form.name}`);
     if (!form.whatsapp) { await page.type("#whatsapp", "0123456789"); entry.confirmForm.whatsappTyped = "0123456789"; }
-    if (industry.address) {
-      await clickText(page, "button", "Address, Instagram, Facebook");
+    if (industry.address || industry.socials) {
+      // The optional details fold open with one button; it is already open when the AI found something.
+      if (!(await page.$("#address"))) await clickText(page, "button", "Address & social media");
       await page.waitForSelector("#address", { timeout: 5000 });
-      await page.$eval("#address", (e) => { e.focus(); e.select(); });
-      await page.keyboard.type(industry.address);
-      entry.confirmForm.address = industry.address;
+      if (industry.address) {
+        await page.$eval("#address", (e) => { e.focus(); e.select(); });
+        await page.keyboard.type(industry.address);
+        entry.confirmForm.address = industry.address;
+      }
+      for (const [kind, value] of Object.entries(industry.socials ?? {})) {
+        await page.$eval(`#${kind}`, (e) => { e.focus(); e.select(); });
+        await page.keyboard.type(value);
+      }
+      entry.confirmForm.socials = industry.socials;
     }
     await page.screenshot({ path: path.join(shots, `industry-${industry.key}-confirm.png`), fullPage: true });
     await clickText(page, "button", "Looks right");
@@ -179,15 +214,41 @@ for (const industry of selected) {
     await wait(300);
     const offerings = await page.$$eval("input", (els) => els.map((e) => e.value).filter(Boolean));
     entry.contentInputs = offerings;
-    // Profile photo field: only person-led categories get it (Phase 11).
-    const hasProfileField = await page.waitForSelector("#profile-photo", { timeout: industry.personLed ? 15000 : 2000 }).then(() => true, () => false);
-    check(hasProfileField === Boolean(industry.personLed), `profile photo field ${hasProfileField ? "shown" : "hidden"} (${industry.personLed ? "person-led" : "business-led"} category)`);
-    if (industry.profilePhoto && hasProfileField) {
-      await (await profilePhotoInput(page)).uploadFile(avatar);
-      await page.waitForSelector("#profile-photo img", { timeout: 30000 });
-      await page.waitForFunction(() => [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Change"), { timeout: 30000 });
+    // Image fields (Phase 11 + 12): every category gets the cover photo card; person-led
+    // categories get "Your profile photo", business-led ones get "Business logo", never both.
+    await page.waitForSelector("#hero-image", { timeout: 15000 }).catch(() => {});
+    const fields = await page.evaluate(() => ({
+      hero: Boolean(document.querySelector("#hero-image")),
+      profile: Boolean(document.querySelector("#profile-photo")),
+      logo: Boolean(document.querySelector("#business-logo")),
+      heroLabel: document.querySelector("label[for=hero-image]")?.textContent?.trim() ?? null,
+      text: document.body.innerText,
+    }));
+    entry.contentFields = { hero: fields.hero, profile: fields.profile, logo: fields.logo };
+    check(fields.hero && fields.heroLabel === "Hero / cover photo", `cover photo card shown (label "${fields.heroLabel}")`);
+    check(fields.text.includes("Recommended: 1600 × 900 px (16:9)") && fields.text.includes("Upload cover photo"), "cover photo card has the 16:9 guidance and upload button");
+    check(fields.profile === Boolean(industry.personLed), `profile photo field ${fields.profile ? "shown" : "hidden"} (${industry.personLed ? "person-led" : "business-led"} category)`);
+    check(fields.logo === !industry.personLed, `business logo field ${fields.logo ? "shown" : "hidden"} (${industry.personLed ? "person-led" : "business-led"} category)`);
+    const uploadTo = async (id, file) => {
+      await (await imageInput(page, id)).uploadFile(file);
+      await page.waitForSelector(`#${id} img`, { timeout: 30000 });
+      await page.waitForFunction(
+        (sel) => [...document.querySelector(sel).closest("[data-image-field]").querySelectorAll("button")].some((b) => b.textContent.trim() === "Replace"),
+        { timeout: 30000 },
+        `#${id}`,
+      );
+    };
+    if (industry.profilePhoto && fields.profile) { await uploadTo("profile-photo", avatar); entry.profilePhotoUploaded = true; }
+    if (industry.logo && fields.logo) { await uploadTo("business-logo", logoPng); entry.logoUploaded = true; }
+    if (industry.hero && fields.hero) {
+      await uploadTo("hero-image", cover);
+      entry.heroUploaded = true;
+      const chips = await page.$$eval("[aria-label='Crop focus'] button", (els) => els.map((b) => b.textContent.trim()));
+      check(chips.join(",") === "Centre,Top,Bottom", `crop focus chips after cover upload: ${chips.join(",") || "none"}`);
+    }
+    if (entry.profilePhotoUploaded || entry.logoUploaded || entry.heroUploaded) {
       await wait(500);
-      entry.profilePhotoUploaded = true;
+      await page.screenshot({ path: path.join(shots, `industry-${industry.key}-content.png`), fullPage: true });
     }
     await clickText(page, "button", "Build my website");
     await page.waitForFunction(() => location.pathname.includes("/ready") || /Something went wrong/.test(document.body.innerText), { timeout: 120000 });
@@ -232,6 +293,25 @@ for (const industry of selected) {
       if (industry.profilePhoto) {
         check(site.business.profilePhoto?.path?.startsWith("users/"), `profile photo on the generated site: ${site.business.profilePhoto?.path ?? "missing"}`);
       }
+      const hero = site.sections.find((s) => s.type === "hero");
+      if (industry.heroMode) check(hero?.presentationMode === industry.heroMode, `hero presentation mode ${hero?.presentationMode} (expected ${industry.heroMode})`);
+      if (industry.logo) {
+        check(site.business.logo?.path?.startsWith("users/"), `logo on the generated site: ${site.business.logo?.path ?? "missing"}`);
+        check(!site.business.profilePhoto, "business-led site carries no profilePhoto");
+      }
+      if (industry.personLed) check(!site.business.logo, "person-led site carries no logo");
+      if (industry.hero) {
+        check(site.business.heroImage?.path?.startsWith("users/"), `cover photo on the generated site: ${site.business.heroImage?.path ?? "missing"}`);
+        check(hero?.image === undefined, "hero section does not also carry a legacy image when a cover photo is set");
+        check((site.business.heroImagePosition ?? "center") === "center", `cover crop focus ${site.business.heroImagePosition ?? "unset (defaults to centre)"}`);
+      } else {
+        check(!site.business.heroImage, "no cover photo invented for a site without one");
+      }
+      for (const [kind, url] of Object.entries(industry.expectSocials ?? {})) {
+        check(site.business[kind] === url, `${kind} normalised to ${site.business[kind]} (expected ${url})`);
+      }
+      const socialKeys = ["instagram", "facebook", "tiktok"].filter((k) => site.business[k]);
+      check(socialKeys.every((k) => industry.expectSocials?.[k]), socialKeys.length ? `no invented socials (${socialKeys.join(", ")})` : "no invented socials");
     }
     entry.siteId = page.url().match(/\/s\/([^/]+)\//)?.[1];
     if (industry.profilePhoto) {
@@ -247,26 +327,75 @@ for (const industry of selected) {
       if (frame) { frame.style.height = "auto"; frame.style.overflow = "visible"; }
     });
     await wait(300);
-    if (industry.address || industry.profilePhoto) {
-      const facts = await page.evaluate(() => {
+    if (industry.hero) {
+      await page.waitForFunction(() => { const i = document.querySelector("[data-hero-mode] img[data-image=cover]"); return Boolean(i && i.complete && i.naturalWidth > 0); }, { timeout: 30000 }).catch(() => {});
+    }
+    const previewFacts = () =>
+      page.evaluate(() => {
         const link = [...document.querySelectorAll("a")].find((a) => /Open in Google Maps|Buka di Google Maps/.test(a.textContent));
         const header = document.querySelector("header");
+        const hero = document.querySelector("[data-hero-mode]");
+        const heroImg = hero?.querySelector("img[data-image=cover]");
+        const rect = heroImg?.getBoundingClientRect();
         return {
           mapsHref: link?.getAttribute("href") ?? null,
           placeholder: [...document.querySelectorAll("span")].some((s) => s.textContent.trim() === "Google Maps"),
           headerPhotoAlt: header?.querySelector("img")?.getAttribute("alt") ?? null,
+          headerLogo: Boolean(header?.querySelector("[data-logo] img")),
+          heroMode: hero?.getAttribute("data-hero-mode") ?? null,
+          heroImg: heroImg ? { loaded: heroImg.complete && heroImg.naturalWidth > 0, w: Math.round(rect.width), h: Math.round(rect.height), fit: getComputedStyle(heroImg).objectFit } : null,
+          heroCta: Boolean(document.querySelector("[data-hero-cta] a")),
+          socials: [...document.querySelectorAll("[data-social] a")].map((a) => ({ href: a.getAttribute("href"), target: a.getAttribute("target"), rel: a.getAttribute("rel"), label: a.getAttribute("aria-label") })),
+          socialBlocks: document.querySelectorAll("[data-social]").length,
           broken: [...document.querySelectorAll("img")].filter((i) => i.complete && i.naturalWidth === 0).length,
+          emptySrc: document.querySelectorAll("img[src='']").length,
+          overflow: document.documentElement.scrollWidth > window.innerWidth,
         };
       });
-      entry.preview = facts;
-      if (industry.address) {
-        check(Boolean(facts.mapsHref?.startsWith("https://www.google.com/maps/search/?api=1&query=")), `preview has a Google Maps link: ${facts.mapsHref}`);
-        check(!facts.placeholder, "no blank 'Google Maps' placeholder box in the preview");
-      }
-      if (industry.profilePhoto) check(Boolean(facts.headerPhotoAlt), `profile photo rendered in the site header (alt "${facts.headerPhotoAlt}")`);
-      check(facts.broken === 0, `${facts.broken} broken image(s) in the preview`);
+    const facts = await previewFacts();
+    entry.preview = facts;
+    if (industry.address) {
+      check(Boolean(facts.mapsHref?.startsWith("https://www.google.com/maps/search/?api=1&query=")), `preview has a Google Maps link: ${facts.mapsHref}`);
+      check(!facts.placeholder, "no blank 'Google Maps' placeholder box in the preview");
     }
+    if (industry.profilePhoto) check(Boolean(facts.headerPhotoAlt), `profile photo rendered in the site header (alt "${facts.headerPhotoAlt}")`);
+    if (industry.logo) check(facts.headerLogo, "logo rendered in the site header");
+    if (industry.heroMode) check(facts.heroMode === industry.heroMode, `preview hero layout "${facts.heroMode}" (expected ${industry.heroMode})`);
+    if (industry.hero) {
+      check(Boolean(facts.heroImg?.loaded), `cover photo loaded in the preview hero: ${JSON.stringify(facts.heroImg)}`);
+      check(facts.heroImg?.fit === "cover" && facts.heroImg.w > 200 && facts.heroImg.h > 120, `cover photo cropped with object-fit cover at ${facts.heroImg?.w}×${facts.heroImg?.h}`);
+    } else {
+      check(!facts.heroImg || facts.heroImg.loaded, "no broken hero image on a site without a cover photo");
+    }
+    check(facts.heroCta, "hero has a visible CTA button");
+    const expectedSocials = Object.values(industry.expectSocials ?? {});
+    check(facts.socials.length === expectedSocials.length && expectedSocials.every((u) => facts.socials.some((s) => s.href === u)), `social icons in the preview: ${facts.socials.map((s) => s.href).join(", ") || "none"} (expected ${expectedSocials.join(", ") || "none"})`);
+    if (expectedSocials.length) {
+      check(facts.socialBlocks === 1, `social icons appear exactly once (${facts.socialBlocks} block(s))`);
+      check(facts.socials.every((s) => s.target === "_blank" && /noopener/.test(s.rel ?? "") && s.label), "social links open a new tab with rel=noopener and an accessible label");
+    } else {
+      check(facts.socialBlocks === 0, "no empty social section");
+    }
+    check(facts.broken === 0 && facts.emptySrc === 0, `${facts.broken} broken / ${facts.emptySrc} empty image(s) in the preview`);
+    check(!facts.overflow, "no horizontal overflow in the mobile preview");
     await page.screenshot({ path: path.join(shots, `industry-${industry.key}-site.png`), fullPage: true });
+    if (industry.desktop) {
+      // The Ready screen's Desktop tab renders the same site in an 1100px frame (container queries switch layouts).
+      await page.setViewport({ width: 1280, height: 900, deviceScaleFactor: 1 });
+      await page.reload({ waitUntil: "load" });
+      await page.waitForSelector("[role=tab]", { timeout: 20000 });
+      await clickText(page, "[role=tab]", "Desktop");
+      await page.waitForFunction(() => document.querySelector("[data-hero-mode]")?.closest("[style*='scale']") !== null, { timeout: 20000 });
+      if (industry.hero) await page.waitForFunction(() => { const i = document.querySelector("[data-hero-mode] img[data-image=cover]"); return Boolean(i && i.complete && i.naturalWidth > 0); }, { timeout: 30000 }).catch(() => {});
+      await wait(500);
+      const d = await previewFacts();
+      entry.previewDesktop = d;
+      check(d.heroMode === industry.heroMode, `desktop preview hero layout "${d.heroMode}"`);
+      if (industry.hero) check(Boolean(d.heroImg?.loaded) && d.heroImg.fit === "cover", `desktop cover photo loaded: ${JSON.stringify(d.heroImg)}`);
+      check(d.socials.length === expectedSocials.length, `desktop preview has ${d.socials.length} social icon(s)`);
+      check(d.broken === 0, `${d.broken} broken image(s) in the desktop preview`);
+      await page.screenshot({ path: path.join(shots, `industry-${industry.key}-desktop.png`), fullPage: true });
+    }
   } catch (e) {
     entry.errors.push(String(e.message).split("\n")[0]);
     failed++;

@@ -24,6 +24,19 @@ export const CATEGORY_IDS = [
 
 export type CategoryId = (typeof CATEGORY_IDS)[number];
 
+/**
+ * How the hero presents the business. The renderer keeps a small set of
+ * layouts and the category picks the default; the AI may choose another when
+ * the description clearly calls for it (e.g. an IT firm as "service").
+ *
+ * - visual:   large cover image + headline + CTA (restaurants, salons, shops)
+ * - person:   the person's photo beside the cover, name + role (advisors, tutors)
+ * - service:  cover + proposition + trust points (contractors, clinics)
+ * - property: cover + agent photo + enquiry CTA + area (property agents)
+ */
+export const HERO_MODES = ["visual", "person", "service", "property"] as const;
+export type HeroMode = (typeof HERO_MODES)[number];
+
 export interface Category {
   id: CategoryId;
   label: string;
@@ -41,6 +54,8 @@ export interface Category {
    * photo; business-led ones (restaurants, shops, clinics) keep logo/photos.
    */
   personLed: boolean;
+  /** Default hero presentation for the category (see HERO_MODES). */
+  heroMode: HeroMode;
 }
 
 export const CATEGORIES: Record<CategoryId, Category> = {
@@ -53,6 +68,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "restaurant_menu",
     preset: "warm",
     personLed: false,
+    heroMode: "visual",
     offeringsLabel: "Menu",
   },
   car: {
@@ -64,6 +80,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "directions_car",
     preset: "bold",
     personLed: true,
+    heroMode: "person",
     offeringsLabel: "Models",
   },
   beauty: {
@@ -75,6 +92,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "spa",
     preset: "elegant",
     personLed: false,
+    heroMode: "visual",
     offeringsLabel: "Services",
   },
   homeServices: {
@@ -86,6 +104,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "home_repair_service",
     preset: "trust",
     personLed: false,
+    heroMode: "service",
     offeringsLabel: "Services",
   },
   photographer: {
@@ -97,6 +116,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "photo_camera",
     preset: "elegant",
     personLed: true,
+    heroMode: "person",
     offeringsLabel: "Packages",
   },
   property: {
@@ -108,6 +128,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "apartment",
     preset: "trust",
     personLed: true,
+    heroMode: "property",
     offeringsLabel: "Listings",
   },
   tutor: {
@@ -119,6 +140,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "school",
     preset: "bright",
     personLed: true,
+    heroMode: "person",
     offeringsLabel: "Subjects",
   },
   retail: {
@@ -130,6 +152,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "storefront",
     preset: "bright",
     personLed: false,
+    heroMode: "visual",
     offeringsLabel: "Products",
   },
   fitness: {
@@ -141,6 +164,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "fitness_center",
     preset: "bold",
     personLed: true,
+    heroMode: "visual",
     offeringsLabel: "Programmes",
   },
   professional: {
@@ -152,6 +176,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "work",
     preset: "trust",
     personLed: true,
+    heroMode: "person",
     offeringsLabel: "Services",
   },
   creative: {
@@ -163,6 +188,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "brush",
     preset: "elegant",
     personLed: true,
+    heroMode: "person",
     offeringsLabel: "Services",
   },
   health: {
@@ -174,6 +200,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "medical_services",
     preset: "trust",
     personLed: false,
+    heroMode: "service",
     offeringsLabel: "Services",
   },
   other: {
@@ -185,6 +212,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     icon: "storefront",
     preset: "trust",
     personLed: false,
+    heroMode: "service",
     offeringsLabel: "Services",
   },
 };

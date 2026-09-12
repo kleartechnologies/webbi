@@ -10,6 +10,7 @@ import { Button, ErrorText, Field, Icon, Input, Label, Spinner } from "@/compone
 import { normalizeMyPhone } from "@/lib/ai/assemble";
 import { cn } from "@/lib/cn";
 import { CATEGORIES, CATEGORY_IDS, type CategoryId } from "@/lib/site/categories";
+import { socialUrl, type SocialKind } from "@/lib/site/links";
 import { newId, type GenerationInput } from "@/lib/site/schema";
 import { updateSite } from "@/lib/site/store";
 import type { Site } from "@/lib/site/types";
@@ -45,13 +46,21 @@ function initialForm(site: Site): FormState {
     area: i?.area ?? u?.area ?? "",
     hours: i?.hours ?? "",
     address: i?.address ?? "",
-    instagram: i?.instagram ?? "",
-    facebook: i?.facebook ?? "",
-    tiktok: i?.tiktok ?? "",
+    // The AI only fills these when the owner wrote a handle or link; they can edit or clear them.
+    instagram: i?.instagram ?? u?.instagram ?? "",
+    facebook: i?.facebook ?? u?.facebook ?? "",
+    tiktok: i?.tiktok ?? u?.tiktok ?? "",
   };
 }
 
 const clean = (v: string) => v.trim() || undefined;
+
+const SOCIAL_FIELDS: { kind: SocialKind; label: string; placeholder: string }[] = [
+  { kind: "instagram", label: "Instagram", placeholder: "@username" },
+  { kind: "facebook", label: "Facebook", placeholder: "Username or page URL" },
+  { kind: "tiktok", label: "TikTok", placeholder: "@username" },
+];
+const SOCIAL_HINT = "Paste your profile link or @username.";
 
 export function ConfirmView({ siteId }: { siteId: string }) {
   const site = useSite(siteId);
@@ -75,7 +84,10 @@ export function ConfirmView({ siteId }: { siteId: string }) {
 function ConfirmForm({ site }: { site: Site }) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(() => initialForm(site));
-  const [showMore, setShowMore] = useState(() => Boolean(site.generation?.input?.address || site.generation?.input?.instagram));
+  const [showMore, setShowMore] = useState(() => {
+    const f = initialForm(site);
+    return Boolean(f.address || f.instagram || f.facebook || f.tiktok);
+  });
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -106,7 +118,9 @@ function ConfirmForm({ site }: { site: Site }) {
     const whatsapp = normalizeMyPhone(form.whatsapp);
     if (!form.whatsapp.trim()) next.whatsapp = "Customers need a WhatsApp number to reach you.";
     else if (!whatsapp) next.whatsapp = "Enter a valid Malaysian mobile number, e.g. 12-345 6789.";
+    for (const { kind } of SOCIAL_FIELDS) if (form[kind].trim() && !socialUrl(kind, form[kind])) next[kind] = SOCIAL_HINT;
     if (Object.keys(next).length) {
+      setShowMore(true);
       setErrors(next);
       return;
     }
@@ -121,14 +135,18 @@ function ConfirmForm({ site }: { site: Site }) {
       area: clean(form.area),
       address: clean(form.address),
       hours: clean(form.hours),
-      instagram: clean(form.instagram),
-      facebook: clean(form.facebook),
-      tiktok: clean(form.tiktok),
+      // Handles and profile links are stored as the platform's canonical URL (validated above).
+      instagram: socialUrl("instagram", form.instagram) ?? undefined,
+      facebook: socialUrl("facebook", form.facebook) ?? undefined,
+      tiktok: socialUrl("tiktok", form.tiktok) ?? undefined,
       offerings:
         previous?.offerings ??
         (understanding?.offerings ?? []).map((o) => ({ id: newId("item"), name: o.name, price: o.price })),
       photos: previous?.photos ?? [],
       profilePhoto: previous?.profilePhoto,
+      logo: previous?.logo,
+      heroImage: previous?.heroImage,
+      heroImagePosition: previous?.heroImagePosition,
     };
     try {
       await updateSite(site.id, { generation: { ...site.generation, status: "understood", input } });
@@ -241,7 +259,7 @@ function ConfirmForm({ site }: { site: Site }) {
         >
           <span className="flex items-center gap-2">
             <Icon name="add" size={20} />
-            Address, Instagram, Facebook (optional)
+            Address &amp; social media (optional)
           </span>
           <Icon name="expand_more" size={20} className={cn("transition-transform", showMore && "rotate-180")} />
         </button>
@@ -251,15 +269,24 @@ function ConfirmForm({ site }: { site: Site }) {
             <Field label="Full address" htmlFor="address" helper="Shown on your site with a Google Maps link.">
               <Input id="address" value={form.address} onChange={(e) => set("address", e.target.value)} maxLength={240} autoComplete="street-address" />
             </Field>
-            <Field label="Instagram" htmlFor="instagram">
-              <Input id="instagram" value={form.instagram} onChange={(e) => set("instagram", e.target.value)} maxLength={120} placeholder="@yourbusiness" leading="instagram.com/" />
-            </Field>
-            <Field label="Facebook" htmlFor="facebook">
-              <Input id="facebook" value={form.facebook} onChange={(e) => set("facebook", e.target.value)} maxLength={120} placeholder="yourpage" leading="facebook.com/" />
-            </Field>
-            <Field label="TikTok" htmlFor="tiktok">
-              <Input id="tiktok" value={form.tiktok} onChange={(e) => set("tiktok", e.target.value)} maxLength={120} placeholder="@yourbusiness" leading="tiktok.com/" />
-            </Field>
+            <div className="flex flex-col gap-1">
+              <Label>Social media (optional)</Label>
+              <p className="text-[12px] leading-[1.4] text-muted">Add your social media so customers can find you.</p>
+            </div>
+            {SOCIAL_FIELDS.map(({ kind, label, placeholder }) => (
+              <Field key={kind} label={label} htmlFor={kind} error={errors[kind]}>
+                <Input
+                  id={kind}
+                  value={form[kind]}
+                  onChange={(e) => set(kind, e.target.value)}
+                  maxLength={120}
+                  placeholder={placeholder}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  invalid={Boolean(errors[kind])}
+                />
+              </Field>
+            ))}
           </div>
         ) : null}
         {saveError ? <ErrorText>{saveError}</ErrorText> : null}

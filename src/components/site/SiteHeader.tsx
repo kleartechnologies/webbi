@@ -2,6 +2,7 @@ import { Icon, type IconName } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
 import type { NavItem, RenderCtx } from "./context";
 import { ProfilePhoto } from "./ProfilePhoto";
+import { SiteImage } from "./SiteImage";
 
 export function SiteHeader({ ctx, nav }: { ctx: RenderCtx; nav: NavItem[] }) {
   const { site, category, preset, primary, chat, strings, target, rel } = ctx;
@@ -10,6 +11,7 @@ export function SiteHeader({ ctx, nav }: { ctx: RenderCtx; nav: NavItem[] }) {
   const name = site.business.name;
   const initial = name.trim().charAt(0).toUpperCase();
   const photo = category.personLed ? site.business.profilePhoto : undefined;
+  const logo = !category.personLed ? site.business.logo : undefined;
   const tagline = site.business.tagline && site.business.tagline.length <= 32 ? site.business.tagline : undefined;
 
   const action: { href: string; icon: IconName; fill: boolean; green: boolean; label: string } | null = primary.href
@@ -27,6 +29,10 @@ export function SiteHeader({ ctx, nav }: { ctx: RenderCtx; nav: NavItem[] }) {
         <div className="flex min-w-0 items-center gap-[10px]">
           {photo ? (
             <ProfilePhoto image={photo} name={name} size={32} className={dark ? "ring-white/20" : "ring-site-line"} />
+          ) : logo ? (
+            <span className={cn("relative block h-8 w-8 shrink-0 overflow-hidden rounded-[9px] bg-white ring-1", dark ? "ring-white/20" : "ring-site-line")} data-logo>
+              <SiteImage image={{ ...logo, alt: logo.alt ?? name }} sizes="32px" className="object-contain" />
+            </span>
           ) : !elegant ? (
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-site-accent font-site text-[16px] font-bold text-white">
               {initial}

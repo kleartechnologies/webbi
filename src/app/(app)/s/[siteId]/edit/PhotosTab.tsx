@@ -6,7 +6,7 @@ import { Icon, Spinner } from "@/components/ui";
 import { deleteSiteImage, uploadSiteImage } from "@/lib/images/upload";
 import type { SiteContent } from "@/lib/site/schema";
 import { Badge, SectionHeading } from "./EditorBits";
-import { setSitePhotos, sitePhotos } from "./sections";
+import { galleryPhotos, setGalleryPhotos, setSitePhotos, sitePhotos } from "./sections";
 import type { Update } from "./useDraft";
 
 interface Props {
@@ -20,7 +20,12 @@ interface Props {
 const MAX_PHOTOS = 25;
 
 export function PhotosTab({ site, update, uid, siteId }: Props) {
-  const photos = sitePhotos(site);
+  // With a dedicated cover photo (Business tab) this tab is the gallery only;
+  // older sites without one keep "first photo is the hero".
+  const hasCover = Boolean(site.business.heroImage);
+  const read = hasCover ? galleryPhotos : sitePhotos;
+  const write = hasCover ? setGalleryPhotos : setSitePhotos;
+  const photos = read(site);
   const [uploading, setUploading] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -37,7 +42,7 @@ export function PhotosTab({ site, update, uid, siteId }: Props) {
         setUploading((u) => ({ ...u, [key]: 0 }));
         try {
           const image = await uploadSiteImage(uid, siteId, file, (p) => setUploading((u) => ({ ...u, [key]: p })));
-          update((d) => setSitePhotos(d, [...sitePhotos(d), image]));
+          update((d) => write(d, [...read(d), image]));
         } catch (err) {
           console.error(err);
           setError("One of the photos couldn't be uploaded. Try a smaller image.");
@@ -56,7 +61,7 @@ export function PhotosTab({ site, update, uid, siteId }: Props) {
     const photo = photos[index];
     if (!photo) return;
     void deleteSiteImage(photo);
-    update((d) => setSitePhotos(d, sitePhotos(d).filter((_, i) => i !== index)));
+    update((d) => write(d, read(d).filter((_, i) => i !== index)));
   };
 
   const makeHero = (index: number) => {
@@ -69,12 +74,12 @@ export function PhotosTab({ site, update, uid, siteId }: Props) {
 
   return (
     <div className="flex flex-col gap-[10px]">
-      <SectionHeading title="Photos" note="First photo is your hero" />
+      <SectionHeading title="Photos" note={hasCover ? "Gallery" : "First photo is your hero"} />
       <div className="grid grid-cols-3 gap-2">
         {photos.map((photo, index) => (
           <div key={photo.path ?? photo.url} className="relative aspect-square overflow-hidden rounded-input bg-line">
             <Image src={photo.url} alt={photo.alt ?? ""} fill sizes="(max-width: 560px) 33vw, 180px" className="object-cover" unoptimized />
-            {index === 0 ? (
+            {hasCover ? null : index === 0 ? (
               <span className="absolute top-1.5 left-1.5">
                 <Badge tone="amber">Hero</Badge>
               </span>
@@ -115,9 +120,11 @@ export function PhotosTab({ site, update, uid, siteId }: Props) {
         ) : null}
       </div>
       <p className="text-[12px] leading-[1.5] text-muted">
-        {photos.length
-          ? "Tap “Use as hero” to change the main photo. Webbi crops for each section automatically."
-          : "Add a hero photo and a few of your work, space or products. Webbi crops them for you."}
+        {hasCover
+          ? "Your cover photo is set under Business → Hero / cover photo. These photos form the gallery."
+          : photos.length
+            ? "Tap “Use as hero” to change the main photo. Webbi crops for each section automatically."
+            : "Add a hero photo and a few of your work, space or products. Webbi crops them for you."}
       </p>
       {error ? <p role="alert" className="text-[12px] font-semibold text-danger">{error}</p> : null}
       <input

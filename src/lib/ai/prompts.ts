@@ -4,7 +4,7 @@ import type { GenerateRequest } from "./provider";
 
 const categoryGuide = CATEGORY_IDS.map((id) => {
   const c = CATEGORIES[id];
-  return `- ${id}: ${c.label} — ${c.hint}. Default CTA: "${c.cta}". Offerings label: "${c.offeringsLabel}".`;
+  return `- ${id}: ${c.label} — ${c.hint}. Default CTA: "${c.cta}". Offerings label: "${c.offeringsLabel}". Hero layout: ${c.heroMode}.`;
 }).join("\n");
 
 const presetGuide = PRESET_IDS.map((id) => `- ${id}: ${PRESETS[id].description}`).join("\n");
@@ -38,7 +38,8 @@ ${categoryGuide}
 - highlights: selling points the owner mentioned (halal, home-made, free delivery, trade-in help, 10 years experience…). Max 6, none if none.
 - ctaLabel: the category's default CTA translated into the owner's language (e.g. "Order on WhatsApp" → "Order ikut WhatsApp" for ms). Use another CTA only if the owner clearly implies one (e.g. "Book a Test Drive").
 - tone: friendly, premium, professional or playful — judge from their wording.
-- summary: ONE sentence in the owner's language that reads back what you understood, e.g. "Kedai makan di Kajang yang jual nasi lemak dan lauk kampung, order ikut WhatsApp."`;
+- summary: ONE sentence in the owner's language that reads back what you understood, e.g. "Kedai makan di Kajang yang jual nasi lemak dan lauk kampung, order ikut WhatsApp."
+- instagram / facebook / tiktok: ONLY when the owner explicitly wrote a handle or profile link for that platform (e.g. "IG: @kedaiabc", "Instagram saya @amir.perodua", "facebook.com/abckitchen", "TikTok @kedai.abc"). Copy it exactly as written. Never derive a handle from the business name or guess one; when unsure, null.`;
 
 export const GENERATE_SYSTEM = `You are Webbi's website writer. You turn a Malaysian small business's confirmed details into the structured content of a one-page website. You output data only — never HTML or CSS. A renderer turns your sections into a mobile-first page with a fixed WhatsApp call-to-action button.
 
@@ -47,7 +48,10 @@ ${LANGUAGE_RULES}
 ${GROUNDING_RULES}
 
 SECTIONS — choose what fits this business, in this order
-1. hero (always first): headline (max ~8 words, specific to this business, not generic), subheadline (one sentence, what + where + for whom), badge (optional 2–4 word label such as "Halal · Kajang" or "Authorised Proton Advisor" — only from given facts).
+1. hero (always first): headline (max ~8 words, specific to this business, not generic), subheadline (one sentence, what + where + for whom), badge (optional 2–4 word label such as "Halal · Kajang" or "Authorised Proton Advisor" — only from given facts), presentationMode: how the renderer lays the hero out — "visual" (big cover photo: restaurants, salons, shops), "person" (the owner's photo and name beside the cover: sales advisors, agents, tutors, photographers, freelancers), "service" (cover + proposition + trust points: contractors, clinics, repair, firms), "property" (property agents). Pass null to use the category's default layout; choose another only when the description clearly calls for it (e.g. a firm of several people rather than one named professional → "service").
+
+IMAGES
+The owner's cover photo, logo and profile photo are uploaded separately and placed by the renderer. Never describe them, never refer to "the photo above", and never output image URLs or file names anywhere.
 2. about (always): 1–2 short paragraphs in the owner's voice. Warm, concrete, no hype. Optional highlights list of up to 4 short phrases taken from the given selling points.
 3. offerings (if the owner listed any items): kind matching the category (menu / models / services / packages / listings / subjects / treatments / classes / products), title in the owner's language, items in the owner's order with their exact names and given prices; add a one-line appetising description per item ONLY where it is safe and generic (e.g. describing what nasi lemak is), otherwise leave description null. Never add items or prices the owner did not give.
 4. highlights ("why choose us"): only if there are at least 2 grounded selling points. Each with a fitting icon from the allowed list.
@@ -92,6 +96,8 @@ export function buildGenerateUserMessage(req: GenerateRequest): string {
           .join("\n")}`
       : "- Offerings: none listed (do not invent any; omit the offerings section)",
   );
+  lines.push(`- Hero layout default for this category: ${c.heroMode}`);
+  lines.push(`- Cover photo uploaded: ${input.heroImage ? "yes" : "no"}; ${c.personLed ? "profile photo" : "logo"} uploaded: ${(c.personLed ? input.profilePhoto : input.logo) ? "yes" : "no"}`);
   lines.push(`- Photos uploaded: ${input.photos.length} (the renderer places them; do not describe them)`);
   lines.push("");
   lines.push("Write the website content now.");

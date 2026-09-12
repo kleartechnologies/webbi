@@ -111,10 +111,22 @@ export function setSitePhotos(site: SiteContent, photos: SiteImage[]): SiteConte
   return next;
 }
 
+/** Gallery photos only (sites with a dedicated cover photo keep the hero out of the grid). */
+export function galleryPhotos(site: SiteContent): SiteImage[] {
+  return findSection(site, "gallery")?.images ?? [];
+}
+
+export function setGalleryPhotos(site: SiteContent, photos: SiteImage[]): SiteContent {
+  if (!photos.length) return findSection(site, "gallery") ? patchSection(site, "gallery", { images: [] }) : site;
+  const next = ensureSection(site, "gallery", () => ({ type: "gallery", images: [] }));
+  return patchSection(next, "gallery", { images: photos });
+}
+
 /** Every uploaded image referenced by the site (for cleanup on delete). */
 export function allImages(site: SiteContent): SiteImage[] {
   const images: SiteImage[] = [];
-  if (site.business.profilePhoto) images.push(site.business.profilePhoto);
+  const { profilePhoto, logo, heroImage } = site.business;
+  for (const image of [profilePhoto, logo, heroImage]) if (image) images.push(image);
   for (const section of site.sections) {
     if (section.type === "hero" && section.image) images.push(section.image);
     if (section.type === "gallery") images.push(...section.images);

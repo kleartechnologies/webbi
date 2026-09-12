@@ -57,6 +57,9 @@ const understanding = {
   ctaLabel: "Book Test Drive",
   tone: "friendly",
   summary: "Sales advisor Perodua di Balakong yang bantu cari kereta baru dan loan.",
+  instagram: null,
+  facebook: null,
+  tiktok: null,
 };
 
 const site = {
@@ -65,7 +68,7 @@ const site = {
   theme: { preset: PRESET_IDS[0] },
   cta: { label: "Book Test Drive", message: null },
   sections: [
-    { type: "hero", headline: "Kereta Perodua baru di Balakong", subheadline: null, badge: null },
+    { type: "hero", headline: "Kereta Perodua baru di Balakong", subheadline: null, badge: null, presentationMode: null },
     { type: "contact", title: null, body: null },
     { type: "cta", headline: "Nak test drive?", body: null },
   ],

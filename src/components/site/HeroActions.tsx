@@ -7,7 +7,7 @@ export function PrimaryCta({ ctx }: { ctx: RenderCtx }) {
   const { primary, target, rel } = ctx;
   if (!primary.href) return null;
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-4 pt-4 @3xl:px-8 @3xl:pt-6">
+    <div className="mx-auto w-full max-w-[1120px] px-4 pt-4 @3xl:px-8 @3xl:pt-6" data-hero-cta>
       <a
         href={primary.href}
         target={target}

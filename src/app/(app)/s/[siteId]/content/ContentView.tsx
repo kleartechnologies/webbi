@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppPage } from "@/components/app/AppHeader";
 import { FlowHeader, StickyFooter } from "@/components/app/FlowChrome";
-import { ProfilePhotoField } from "@/components/app/ProfilePhotoField";
+import { ImageUploadField } from "@/components/app/ImageUploadField";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { SiteMissing } from "@/components/app/SiteMissing";
 import { Button, DashedAdd, ErrorText, Icon, Spinner } from "@/components/ui";
@@ -13,12 +13,20 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { cn } from "@/lib/cn";
 import { deleteSiteImage, uploadSiteImage } from "@/lib/images/upload";
 import { CATEGORIES } from "@/lib/site/categories";
-import { newId, type GenerationInput, type SiteImage } from "@/lib/site/schema";
+import { newId, type GenerationInput, type HeroImagePosition, type SiteImage } from "@/lib/site/schema";
 import { updateSite } from "@/lib/site/store";
 import type { Site } from "@/lib/site/types";
 import { useSite } from "@/lib/site/useSite";
 
 type Item = GenerationInput["offerings"][number] & { fromDescription?: boolean };
+
+/** The single images: who the business is (profile photo or logo) and what it looks like (cover). */
+interface Media {
+  profilePhoto?: SiteImage;
+  logo?: SiteImage;
+  heroImage?: SiteImage;
+  heroImagePosition?: HeroImagePosition;
+}
 
 const ACCEPT = "image/*";
 const MAX_PHOTOS = 24;
@@ -64,8 +72,13 @@ function ContentForm({ site }: { site: Site }) {
     (input?.offerings ?? []).map((o) => ({ ...o, fromDescription: mentioned.has(o.name.trim().toLowerCase()) })),
   );
   const [photos, setPhotos] = useState<SiteImage[]>(() => input?.photos ?? []);
-  const [profilePhoto, setProfilePhoto] = useState<SiteImage | undefined>(() => input?.profilePhoto);
-  const [profileUploading, setProfileUploading] = useState(false);
+  const [media, setMedia] = useState<Media>(() => ({
+    profilePhoto: input?.profilePhoto,
+    logo: input?.logo,
+    heroImage: input?.heroImage,
+    heroImagePosition: input?.heroImagePosition,
+  }));
+  const [mediaBusy, setMediaBusy] = useState<Record<string, boolean>>({});
   const [uploading, setUploading] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -80,7 +93,7 @@ function ContentForm({ site }: { site: Site }) {
   }, [input, site.id, router]);
 
   const buildInput = useCallback(
-    (nextItems: Item[], nextPhotos: SiteImage[], nextProfile: SiteImage | undefined): GenerationInput | null => {
+    (nextItems: Item[], nextPhotos: SiteImage[], nextMedia: Media): GenerationInput | null => {
       if (!input) return null;
       return {
         ...input,
@@ -88,8 +101,11 @@ function ContentForm({ site }: { site: Site }) {
           .filter((i) => i.name.trim())
           .map(({ id, name, price, image }) => ({ id, name: name.trim(), price: price?.trim() || undefined, image })),
         photos: nextPhotos,
-        // Only person-led categories carry a profile photo; a restaurant never gets one.
-        profilePhoto: category.personLed ? nextProfile : undefined,
+        // Only person-led categories carry a profile photo; a restaurant gets a logo instead, never both.
+        profilePhoto: category.personLed ? nextMedia.profilePhoto : undefined,
+        logo: category.personLed ? undefined : nextMedia.logo,
+        heroImage: nextMedia.heroImage,
+        heroImagePosition: nextMedia.heroImage ? nextMedia.heroImagePosition : undefined,
       };
     },
     [input, category.personLed],
@@ -97,8 +113,8 @@ function ContentForm({ site }: { site: Site }) {
 
   /** Persist photos right away so an upload is never lost on refresh. */
   const persist = useCallback(
-    async (nextItems: Item[], nextPhotos: SiteImage[], nextProfile: SiteImage | undefined) => {
-      const next = buildInput(nextItems, nextPhotos, nextProfile);
+    async (nextItems: Item[], nextPhotos: SiteImage[], nextMedia: Media) => {
+      const next = buildInput(nextItems, nextPhotos, nextMedia);
       if (!next) return;
       try {
         await updateSite(site.id, { generation: { ...site.generation, status: "understood", input: next } });
@@ -152,20 +168,22 @@ function ContentForm({ site }: { site: Site }) {
         });
       }
     }
-    void persist(items, next, profilePhoto);
+    void persist(items, next, media);
   };
 
   const removePhoto = (image: SiteImage) => {
     const next = photos.filter((p) => p !== image);
     setPhotos(next);
     void deleteSiteImage(image);
-    void persist(items, next, profilePhoto);
+    void persist(items, next, media);
   };
 
-  const changeProfilePhoto = (image: SiteImage | undefined) => {
-    setProfilePhoto(image);
-    void persist(items, photos, image);
+  const changeMedia = (patch: Partial<Media>) => {
+    const next = { ...media, ...patch };
+    setMedia(next);
+    void persist(items, photos, next);
   };
+  const mediaBusyFor = (key: string) => (busy: boolean) => setMediaBusy((m) => ({ ...m, [key]: busy }));
 
   const uploadItemPhoto = async (files: FileList | null) => {
     const id = itemPhotoTarget.current;
@@ -190,9 +208,9 @@ function ContentForm({ site }: { site: Site }) {
   };
 
   const build = async () => {
-    const next = buildInput(items, photos, profilePhoto);
+    const next = buildInput(items, photos, media);
     if (!next) return;
-    if (Object.keys(uploading).length || profileUploading) {
+    if (Object.keys(uploading).length || Object.values(mediaBusy).some(Boolean)) {
       setError("Hold on, a photo is still uploading.");
       return;
     }
@@ -208,7 +226,7 @@ function ContentForm({ site }: { site: Site }) {
     }
   };
 
-  const isUploading = Object.keys(uploading).length > 0 || profileUploading;
+  const isUploading = Object.keys(uploading).length > 0 || Object.values(mediaBusy).some(Boolean);
 
   return (
     <>
@@ -286,8 +304,22 @@ function ContentForm({ site }: { site: Site }) {
           <DashedAdd onClick={addItem}>Add item</DashedAdd>
         </div>
 
-        {category.personLed && user ? (
-          <ProfilePhotoField uid={user.uid} siteId={site.id} value={profilePhoto} onChange={changeProfilePhoto} onBusy={setProfileUploading} />
+        {user ? (
+          <ImageUploadField
+            kind="hero"
+            uid={user.uid}
+            siteId={site.id}
+            value={media.heroImage}
+            onChange={(heroImage) => changeMedia({ heroImage })}
+            onBusy={mediaBusyFor("hero")}
+            position={media.heroImagePosition}
+            onPosition={(heroImagePosition) => changeMedia({ heroImagePosition })}
+          />
+        ) : null}
+        {user && category.personLed ? (
+          <ImageUploadField kind="profile" uid={user.uid} siteId={site.id} value={media.profilePhoto} onChange={(profilePhoto) => changeMedia({ profilePhoto })} onBusy={mediaBusyFor("profile")} />
+        ) : user ? (
+          <ImageUploadField kind="logo" uid={user.uid} siteId={site.id} value={media.logo} onChange={(logo) => changeMedia({ logo })} onBusy={mediaBusyFor("logo")} />
         ) : null}
 
         <div className="flex flex-col gap-[10px]">
@@ -308,7 +340,7 @@ function ContentForm({ site }: { site: Site }) {
             {photos.map((photo, index) => (
               <div key={photo.path ?? photo.url} className="relative aspect-square overflow-hidden rounded-input bg-line">
                 <Image src={photo.url} alt="" fill sizes="(max-width: 560px) 33vw, 180px" className="object-cover" unoptimized />
-                {index === 0 ? (
+                {index === 0 && !media.heroImage ? (
                   <span className="absolute bottom-1.5 left-1.5 rounded-pill bg-ink/75 px-2 py-[3px] text-[10px] font-bold text-white">
                     Cover
                   </span>
@@ -334,6 +366,7 @@ function ContentForm({ site }: { site: Site }) {
           </div>
           <p className="text-[12px] leading-[1.5] text-muted">
             Tip: photos taken in daylight, close to the {category.id === "restaurant" ? "food" : "subject"}. Webbi crops and fits them for you.
+            {!media.heroImage && photos.length ? " Without a cover photo, your first photo is used as the cover." : ""}
           </p>
         </div>
         {error ? <ErrorText>{error}</ErrorText> : null}

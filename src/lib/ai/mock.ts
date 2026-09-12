@@ -19,6 +19,19 @@ async function guard(kind: "understand" | "generate") {
   if (delay > 0) await new Promise((r) => setTimeout(r, delay));
 }
 
+/**
+ * A social handle only when the owner wrote one: a profile URL for the
+ * platform, or "@handle" within a few characters of the platform's name
+ * ("IG: @kedaiabc", "Instagram saya @amir.perodua"). Never derived from the
+ * business name.
+ */
+function writtenHandle(text: string, names: string, host: string): string | null {
+  const url = text.match(new RegExp(`(?:https?:\\/\\/)?(?:www\\.)?${host}\\/@?[\\w.-]+`, "i"))?.[0];
+  if (url) return url;
+  const at = text.match(new RegExp(`\\b(?:${names})\\b[^@\\n]{0,12}@([\\w.-]{1,30})`, "i"))?.[1].replace(/[.-]+$/, "");
+  return at ? `@${at}` : null;
+}
+
 function detectLanguage(text: string): "en" | "ms" | "mixed" {
   const ms = (text.match(/\b(saya|kami|kedai|jual|dan|di|buka|harga|servis|area|nak|boleh|untuk|dengan)\b/gi) ?? []).length;
   const en = (text.match(/\b(the|and|we|our|i'm|i am|with|for|in|at|help|free)\b/gi) ?? []).length;
@@ -68,6 +81,9 @@ export const mockProvider: AiProvider = {
       ctaLabel: CATEGORIES[category].cta,
       tone: "friendly",
       summary: `[mock] ${text.slice(0, 120)}`,
+      instagram: writtenHandle(text, "instagram|insta|ig", "instagram\\.com"),
+      facebook: writtenHandle(text, "facebook|fb", "facebook\\.com"),
+      tiktok: writtenHandle(text, "tiktok", "tiktok\\.com"),
     };
   },
 
@@ -76,7 +92,7 @@ export const mockProvider: AiProvider = {
     const { input } = req;
     const c = CATEGORIES[input.category];
     const sections: AiSite["sections"] = [
-      { type: "hero", headline: input.name, subheadline: input.tagline ?? null, badge: input.area ?? null },
+      { type: "hero", headline: input.name, subheadline: input.tagline ?? null, badge: input.area ?? null, presentationMode: null },
       { type: "about", title: null, body: [req.description.trim()], highlights: req.highlights?.length ? req.highlights : null },
     ];
     if (input.offerings.length) {

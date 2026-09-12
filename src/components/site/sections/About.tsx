@@ -1,6 +1,7 @@
 import { Icon } from "@/components/ui/Icon";
 import type { SectionOf } from "@/lib/site/schema";
 import { card, Section, SectionTitle } from "../Section";
+import { SocialLinks } from "../SocialLinks";
 import type { RenderCtx } from "../context";
 
 export function About({ ctx, section }: { ctx: RenderCtx; section: SectionOf<"about"> }) {
@@ -15,6 +16,7 @@ export function About({ ctx, section }: { ctx: RenderCtx; section: SectionOf<"ab
               <p key={i}>{paragraph}</p>
             ))}
           </div>
+          {ctx.category.personLed ? <SocialLinks ctx={ctx} at="about" label={ctx.strings.follow} className="pt-4" /> : null}
         </div>
         {highlights.length ? (
           <ul className="grid gap-2 @md:grid-cols-2 @3xl:grid-cols-1 @3xl:self-center">

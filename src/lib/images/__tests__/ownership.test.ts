@@ -18,4 +18,11 @@ describe("image ownership", () => {
     expect(foreignImage("u1", { photos: [mine, theirs], offerings: [], profilePhoto: undefined })).toBe(theirs);
     expect(foreignImage("u1", { photos: [], offerings: [{ id: "i", name: "x", image: theirs }], profilePhoto: mine })).toBe(theirs);
   });
+
+  it("flags a logo or cover photo from another account, so uploads can never be attached across users", () => {
+    expect(foreignImage("u1", { photos: [], offerings: [], profilePhoto: undefined, logo: mine, heroImage: mine })).toBeUndefined();
+    expect(foreignImage("u1", { photos: [], offerings: [], logo: theirs })).toBe(theirs);
+    expect(foreignImage("u1", { photos: [], offerings: [], heroImage: theirs })).toBe(theirs);
+    expect(foreignImage("u1", { photos: [mine], offerings: [], logo: mine, heroImage: theirs })).toBe(theirs);
+  });
 });

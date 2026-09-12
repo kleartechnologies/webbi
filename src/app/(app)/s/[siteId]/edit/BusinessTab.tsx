@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { ProfilePhotoField } from "@/components/app/ProfilePhotoField";
+import { ImageUploadField } from "@/components/app/ImageUploadField";
 import { DashedAdd, Field, Input, Textarea } from "@/components/ui";
 import { normalizeMyPhone } from "@/lib/ai/assemble";
 import { CATEGORIES } from "@/lib/site/categories";
-import { newId, type SiteContent } from "@/lib/site/schema";
+import { socialUrl, type SocialKind } from "@/lib/site/links";
+import { newId, type SiteContent, type SiteImage } from "@/lib/site/schema";
 import { IconButton, SectionHeading } from "./EditorBits";
 import { ensureSection, findSection, patchSection, sectionIndex } from "./sections";
 import type { Issues, Update } from "./useDraft";
@@ -19,6 +20,15 @@ interface Props {
 }
 
 const clean = (value: string) => (value.trim() ? value : undefined);
+
+const SOCIAL_FIELDS: { kind: SocialKind; label: string; placeholder: string }[] = [
+  { kind: "instagram", label: "Instagram", placeholder: "@username" },
+  { kind: "facebook", label: "Facebook", placeholder: "Username or page URL" },
+  { kind: "tiktok", label: "TikTok", placeholder: "@username" },
+];
+
+/** Shown under a social field whose value can't become a safe profile link. */
+export const SOCIAL_HINT = "Paste your profile link or @username.";
 const localPart = (whatsapp?: string) => (whatsapp ? (whatsapp.startsWith("60") ? whatsapp.slice(2) : whatsapp) : "");
 
 /** Business, hero, about, contact details, location and opening hours. */
@@ -34,6 +44,19 @@ export function BusinessTab({ site, update, issues, uid, siteId }: Props) {
 
   const setBusiness = (patch: Partial<SiteContent["business"]>) =>
     update((d) => ({ ...d, business: { ...d.business, ...patch } }));
+
+  /**
+   * The cover the hero shows: the dedicated cover photo, or on sites built
+   * before it existed, the first photo. Replacing or removing writes the new
+   * cover and drops the legacy one, so removing always restores the category
+   * fallback.
+   */
+  const coverImage = site.business.heroImage ?? hero?.image;
+  const onCover = (image: SiteImage | undefined) =>
+    update((d) => {
+      const next = { ...d, business: { ...d.business, heroImage: image, heroImagePosition: image ? d.business.heroImagePosition : undefined } };
+      return findSection(next, "hero") ? patchSection(next, "hero", { image: undefined }) : next;
+    });
 
   const onAbout = (text: string) => {
     setAboutText(text);
@@ -94,8 +117,19 @@ export function BusinessTab({ site, update, issues, uid, siteId }: Props) {
         />
       </Field>
       {personLed ? (
-        <ProfilePhotoField uid={uid} siteId={siteId} value={site.business.profilePhoto} onChange={(profilePhoto) => setBusiness({ profilePhoto })} />
-      ) : null}
+        <ImageUploadField kind="profile" uid={uid} siteId={siteId} value={site.business.profilePhoto} onChange={(profilePhoto) => setBusiness({ profilePhoto })} />
+      ) : (
+        <ImageUploadField kind="logo" uid={uid} siteId={siteId} value={site.business.logo} onChange={(logo) => setBusiness({ logo })} />
+      )}
+      <ImageUploadField
+        kind="hero"
+        uid={uid}
+        siteId={siteId}
+        value={coverImage}
+        onChange={onCover}
+        position={site.business.heroImagePosition}
+        onPosition={(heroImagePosition) => setBusiness({ heroImagePosition })}
+      />
 
       {hero ? (
         <>
@@ -204,29 +238,29 @@ export function BusinessTab({ site, update, issues, uid, siteId }: Props) {
       </div>
 
       <div className="flex flex-col gap-[10px]">
-        <SectionHeading title="Social" note="Optional" />
+        <SectionHeading title="Social media" note="Optional" />
+        <p className="-mt-1 text-[13px] leading-[1.45] text-muted">Add your social media so customers can find you.</p>
         <div className="grid grid-cols-1 gap-[14px]">
-          <Input
-            aria-label="Instagram"
-            leading="instagram.com/"
-            value={site.business.instagram ?? ""}
-            maxLength={120}
-            onChange={(e) => setBusiness({ instagram: clean(e.target.value.trim()) })}
-          />
-          <Input
-            aria-label="Facebook"
-            leading="facebook.com/"
-            value={site.business.facebook ?? ""}
-            maxLength={120}
-            onChange={(e) => setBusiness({ facebook: clean(e.target.value.trim()) })}
-          />
-          <Input
-            aria-label="TikTok"
-            leading="tiktok.com/@"
-            value={site.business.tiktok ?? ""}
-            maxLength={120}
-            onChange={(e) => setBusiness({ tiktok: clean(e.target.value.trim()) })}
-          />
+          {SOCIAL_FIELDS.map(({ kind, label, placeholder }) => {
+            const value = site.business[kind] ?? "";
+            const invalid = Boolean(value.trim()) && !socialUrl(kind, value);
+            return (
+              <Field key={kind} label={label} htmlFor={`biz-${kind}`} error={invalid ? SOCIAL_HINT : undefined}>
+                <Input
+                  id={`biz-${kind}`}
+                  value={value}
+                  placeholder={placeholder}
+                  maxLength={120}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  invalid={invalid}
+                  onChange={(e) => setBusiness({ [kind]: clean(e.target.value) })}
+                  // Stored as the platform's canonical URL once the owner leaves the field; unusable text stays visible with the hint.
+                  onBlur={(e) => setBusiness({ [kind]: socialUrl(kind, e.target.value) ?? clean(e.target.value.trim()) })}
+                />
+              </Field>
+            );
+          })}
         </div>
       </div>
     </div>

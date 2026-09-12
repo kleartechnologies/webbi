@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { SiteRenderer } from "@/components/site/SiteRenderer";
 import { Icon } from "@/components/ui/Icon";
 import { getDemoSite } from "@/lib/site/demo";
+import { heroImageOf } from "@/lib/site/hero";
 import { siteStrings } from "@/lib/site/i18n";
 import { getPublicSite } from "@/lib/site/publicStore";
 import type { SiteContent } from "@/lib/site/schema";
@@ -28,7 +29,7 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   const title = business.tagline ? `${business.name} – ${business.tagline}` : business.name;
   const description =
     (hero?.type === "hero" && hero.subheadline) || [business.tagline, business.area].filter(Boolean).join(" · ") || business.name;
-  const image = hero?.type === "hero" ? hero.image?.url : undefined;
+  const image = heroImageOf(site.content, hero?.type === "hero" ? hero : undefined)?.url;
   return {
     title: { absolute: title },
     description,

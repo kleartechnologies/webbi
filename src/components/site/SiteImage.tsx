@@ -11,11 +11,14 @@ export function SiteImage({
   sizes,
   priority,
   className,
+  marker,
 }: {
   image: SiteImageData;
   sizes: string;
   priority?: boolean;
   className?: string;
+  /** Names the image's role in the DOM (`data-image`), e.g. "cover" for the hero photo. */
+  marker?: string;
 }) {
   return (
     <Image
@@ -26,6 +29,7 @@ export function SiteImage({
       priority={priority}
       unoptimized={LOCAL.test(image.url)}
       className={cn("object-cover", className)}
+      data-image={marker}
     />
   );
 }

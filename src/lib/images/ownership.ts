@@ -11,7 +11,10 @@ export function ownsImagePath(uid: string, path: string | undefined): boolean {
  * generate API refuses such requests so nobody can point a site at another
  * account's file.
  */
-export function foreignImage(uid: string, input: Pick<GenerationInput, "photos" | "offerings" | "profilePhoto">): SiteImage | undefined {
-  const images = [input.profilePhoto, ...input.photos, ...input.offerings.map((o) => o.image)];
+export function foreignImage(
+  uid: string,
+  input: Pick<GenerationInput, "photos" | "offerings" | "profilePhoto" | "logo" | "heroImage">,
+): SiteImage | undefined {
+  const images = [input.profilePhoto, input.logo, input.heroImage, ...input.photos, ...input.offerings.map((o) => o.image)];
   return images.find((img): img is SiteImage => Boolean(img?.path) && !ownsImagePath(uid, img?.path));
 }

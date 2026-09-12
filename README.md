@@ -131,6 +131,13 @@ QA_BASE_URL=http://localhost:3000 npm run qa:publish
 
 `scripts/qa/publish-flow.mjs` drives a phone-sized headless Chrome through onboarding, guest → account, slug validation, mock payment, the live page, the public `/w/{slug}` page as a signed-out visitor, "Publish changes" from the editor, the dashboard, slug collisions, cancelled checkouts and bogus return sessions, and checks the resulting Firestore documents. Screenshots land in `scripts/qa/shots/`. Set `QA_CHROME` if Chrome isn't at the default macOS path.
 
+Two more harnesses cover the per-industry output against the same server:
+
+```bash
+QA_BASE_URL=http://localhost:3000 npm run qa:industries        # six categories: cards shown on the Content step, logo / profile photo / cover uploads, social handles, hero mode, preview + desktop
+QA_BASE_URL=http://localhost:3000 npm run qa:profile-location  # car advisor + restaurant end to end: uploads, crop focus, social normalisation, Maps card, publish, public page at 390 / 768 / 1280, editor Remove / Replace
+```
+
 ### Testing the real AI provider locally
 
 `netlify dev` / `netlify serve` do **not** hand the functions your `OPENAI_API_KEY`: the CLI replaces `OPENAI_API_KEY` and `OPENAI_BASE_URL` with a Netlify AI Gateway token and URL (usage is billed to Netlify credits, not your OpenAI account). That token is bound to the IPv4 address the CLI used, and Node prefers IPv6, so calls fail with `403 mismatched_client_ip` unless you start the runner with IPv4 first:

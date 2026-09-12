@@ -3,7 +3,8 @@
  * merges the owner's confirmed facts (which always win), places uploaded
  * photos, and validates against siteContentSchema.
  */
-import { CATEGORIES } from "@/lib/site/categories";
+import { CATEGORIES, type Category, type HeroMode } from "@/lib/site/categories";
+import { socialUrl, type SocialKind } from "@/lib/site/links";
 import {
   SITE_VERSION,
   siteContentSchema,
@@ -36,6 +37,24 @@ export function normalizeMyPhone(raw: string | null | undefined): string | undef
   return /^\d{9,15}$/.test(digits) ? digits : undefined;
 }
 
+/** A social handle the model extracted is kept only when it normalises to a safe profile URL — and is stored as that URL. */
+function extractedSocial(kind: SocialKind, value: string | null | undefined): string | undefined {
+  const text = opt(value);
+  return (text && socialUrl(kind, text)) || undefined;
+}
+
+/**
+ * The model may suggest a hero layout, but only one that makes sense for the
+ * category: "person" needs a person-led business and "property" a property
+ * agent. Anything else falls back to the category default.
+ */
+export function resolvePresentationMode(choice: HeroMode | null | undefined, category: Category): HeroMode {
+  if (!choice) return category.heroMode;
+  if (choice === "person" && !category.personLed) return category.heroMode;
+  if (choice === "property" && category.id !== "property") return category.heroMode;
+  return choice;
+}
+
 export function toUnderstanding(raw: AiUnderstanding): Understanding {
   const category = raw.category;
   const candidate = {
@@ -53,6 +72,9 @@ export function toUnderstanding(raw: AiUnderstanding): Understanding {
     ctaLabel: raw.ctaLabel.trim() || CATEGORIES[category].cta,
     tone: raw.tone,
     summary: raw.summary.trim(),
+    instagram: extractedSocial("instagram", raw.instagram),
+    facebook: extractedSocial("facebook", raw.facebook),
+    tiktok: extractedSocial("tiktok", raw.tiktok),
   };
   return understandingSchema.parse(candidate);
 }
@@ -61,7 +83,14 @@ function convertSection(section: AiSite["sections"][number], input: GenerationIn
   const base = { id: newId("sec"), enabled: true as const };
   switch (section.type) {
     case "hero":
-      return { ...base, type: "hero", headline: section.headline, subheadline: opt(section.subheadline), badge: opt(section.badge) };
+      return {
+        ...base,
+        type: "hero",
+        headline: section.headline,
+        subheadline: opt(section.subheadline),
+        badge: opt(section.badge),
+        presentationMode: resolvePresentationMode(section.presentationMode, CATEGORIES[input.category]),
+      };
     case "about":
       return {
         ...base,
@@ -133,13 +162,18 @@ export function assembleSite(raw: AiSite, input: GenerationInput, language: Lang
       items: input.offerings.map((o) => ({ id: o.id, name: o.name, price: o.price, image: o.image })),
     });
   }
-  // Photos: first one becomes the hero image; the rest form a gallery.
+  // Photos: the uploaded cover (business.heroImage) is the hero; without one the
+  // first photo stands in, as before. Everything else forms the gallery.
   const hero = sections[0];
-  if (hero.type === "hero" && input.photos[0]) hero.image = input.photos[0];
-  if (input.photos.length > 1) {
+  if (hero.type === "hero") {
+    hero.presentationMode ??= category.heroMode;
+    if (!input.heroImage && input.photos[0]) hero.image = input.photos[0];
+  }
+  const gallery = input.heroImage ? input.photos : input.photos.slice(1);
+  if (gallery.length) {
     const afterOfferings = sections.findIndex((s) => s.type === "offerings");
     const at = afterOfferings === -1 ? Math.min(2, sections.length) : afterOfferings + 1;
-    sections.splice(at, 0, { id: newId("sec"), enabled: true, type: "gallery", images: input.photos.slice(1) });
+    sections.splice(at, 0, { id: newId("sec"), enabled: true, type: "gallery", images: gallery });
   }
   if (!sections.some((s) => s.type === "contact")) {
     sections.push({ id: newId("sec"), enabled: true, type: "contact" });
@@ -164,10 +198,14 @@ export function assembleSite(raw: AiSite, input: GenerationInput, language: Lang
       area: input.area ?? opt(raw.business.area),
       whatsapp: input.whatsapp,
       address: input.address,
-      instagram: input.instagram,
-      facebook: input.facebook,
-      tiktok: input.tiktok,
+      instagram: socialUrl("instagram", input.instagram) ?? undefined,
+      facebook: socialUrl("facebook", input.facebook) ?? undefined,
+      tiktok: socialUrl("tiktok", input.tiktok) ?? undefined,
+      // The owner's uploads are authoritative; the model never sees or sets image URLs.
       profilePhoto: category.personLed ? input.profilePhoto : undefined,
+      logo: category.personLed ? undefined : input.logo,
+      heroImage: input.heroImage,
+      heroImagePosition: input.heroImage ? input.heroImagePosition : undefined,
     },
     theme: { preset: raw.theme.preset ?? category.preset },
     cta: {

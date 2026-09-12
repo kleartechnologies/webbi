@@ -6,7 +6,7 @@
  * No HTML/CSS is ever stored; sections are typed data.
  */
 import { z } from "zod";
-import { CATEGORY_IDS } from "./categories";
+import { CATEGORY_IDS, HERO_MODES } from "./categories";
 import { PRESET_IDS } from "./presets";
 
 export const SITE_VERSION = 1 as const;
@@ -38,6 +38,10 @@ export const imageSchema = z.object({
   height: z.number().int().positive().optional(),
 });
 export type SiteImage = z.infer<typeof imageSchema>;
+
+/** Which part of a cover photo to keep when it is cropped on small screens. */
+export const HERO_IMAGE_POSITIONS = ["center", "top", "bottom"] as const;
+export type HeroImagePosition = (typeof HERO_IMAGE_POSITIONS)[number];
 
 export const OFFERING_KINDS = [
   "products",
@@ -71,7 +75,13 @@ export const heroSectionSchema = z.object({
   headline: short(90).min(1),
   subheadline: short(220).optional(),
   badge: short(40).optional(),
+  /**
+   * Legacy cover: the first uploaded photo (pre-Phase 12 sites). A dedicated
+   * `business.heroImage` takes precedence when present.
+   */
   image: imageSchema.optional(),
+  /** Hero layout; omitted = the category default. */
+  presentationMode: z.enum(HERO_MODES).optional(),
 });
 
 export const aboutSectionSchema = z.object({
@@ -199,6 +209,14 @@ export const businessSchema = z.object({
    * agent, tutor...). Sites without one keep the initial avatar.
    */
   profilePhoto: imageSchema.optional(),
+  /** Optional logo for business-led sites (restaurants, shops, clinics...). */
+  logo: imageSchema.optional(),
+  /**
+   * Optional cover photo shown in the hero. Never the logo or profile photo:
+   * those identify who the business is, this shows what it looks like.
+   */
+  heroImage: imageSchema.optional(),
+  heroImagePosition: z.enum(HERO_IMAGE_POSITIONS).optional(),
 });
 export type Business = z.infer<typeof businessSchema>;
 
@@ -251,6 +269,10 @@ export const understandingSchema = z.object({
   tone: z.enum(["friendly", "premium", "professional", "playful"]),
   /** One-sentence summary in the owner's language. */
   summary: short(300),
+  /** Social handles/URLs only when the owner wrote them (never invented). */
+  instagram: short(120).optional(),
+  facebook: short(120).optional(),
+  tiktok: short(120).optional(),
 });
 export type Understanding = z.infer<typeof understandingSchema>;
 
@@ -272,6 +294,11 @@ export const generationInputSchema = z.object({
   photos: z.array(imageSchema).max(24),
   /** Optional professional photo of the owner (person-led categories only). */
   profilePhoto: imageSchema.optional(),
+  /** Optional business logo (business-led categories only). */
+  logo: imageSchema.optional(),
+  /** Optional cover photo for the hero. */
+  heroImage: imageSchema.optional(),
+  heroImagePosition: z.enum(HERO_IMAGE_POSITIONS).optional(),
 });
 export type GenerationInput = z.infer<typeof generationInputSchema>;
 

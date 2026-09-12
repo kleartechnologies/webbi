@@ -1,7 +1,8 @@
 import { Icon } from "@/components/ui/Icon";
-import { mailUrl, socialUrl } from "@/lib/site/links";
+import { mailUrl, socialLinks } from "@/lib/site/links";
 import type { SectionOf } from "@/lib/site/schema";
 import { Section, SectionTitle } from "../Section";
+import { SocialLinks, socialPlacement } from "../SocialLinks";
 import type { RenderCtx } from "../context";
 
 const outline = "inline-flex h-11 items-center justify-center gap-2 rounded-pill border-[1.5px] border-site-ink px-5 text-[14px] font-bold text-site-ink";
@@ -9,14 +10,7 @@ const outline = "inline-flex h-11 items-center justify-center gap-2 rounded-pill
 export function Contact({ ctx, section }: { ctx: RenderCtx; section: SectionOf<"contact"> }) {
   const { site, strings, chat, call, target, rel } = ctx;
   const { business } = site;
-  const socials: { label: string; url: string }[] = [];
-  for (const [label, url] of [
-    ["Instagram", socialUrl("instagram", business.instagram)],
-    ["Facebook", socialUrl("facebook", business.facebook)],
-    ["TikTok", socialUrl("tiktok", business.tiktok)],
-  ] as const) {
-    if (url) socials.push({ label, url });
-  }
+  const socials = socialPlacement(ctx) === "contact" ? socialLinks(business) : [];
   if (!chat && !call && !business.email && !socials.length) return null;
 
   return (
@@ -43,16 +37,7 @@ export function Contact({ ctx, section }: { ctx: RenderCtx; section: SectionOf<"
           </a>
         ) : null}
       </div>
-      {socials.length ? (
-        <div className="flex flex-wrap gap-2 pt-4">
-          {socials.map(({ label, url }) => (
-            <a key={label} href={url} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-1 rounded-pill border border-site-line bg-white px-3 text-[13px] font-semibold">
-              {label}
-              <Icon name="arrow_outward" size={16} />
-            </a>
-          ))}
-        </div>
-      ) : null}
+      <SocialLinks ctx={ctx} at="contact" label={strings.follow} className="pt-5" />
     </Section>
   );
 }

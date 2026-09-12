@@ -4,7 +4,7 @@
  * the model never sees or invents URLs or ids — assemble.ts adds those.
  */
 import { z } from "zod";
-import { CATEGORY_IDS } from "@/lib/site/categories";
+import { CATEGORY_IDS, HERO_MODES } from "@/lib/site/categories";
 import { PRESET_IDS } from "@/lib/site/presets";
 import { LANGUAGES, OFFERING_KINDS } from "@/lib/site/schema";
 
@@ -70,6 +70,10 @@ export const aiUnderstandingSchema = z.object({
   ctaLabel: s(40),
   tone: z.enum(["friendly", "premium", "professional", "playful"]),
   summary: s(300),
+  /** Handles or profile links the owner wrote, verbatim; null when not written. Never guessed. */
+  instagram: s(120).nullable(),
+  facebook: s(120).nullable(),
+  tiktok: s(120).nullable(),
 });
 export type AiUnderstanding = z.infer<typeof aiUnderstandingSchema>;
 
@@ -86,6 +90,8 @@ export const aiSectionSchema = z.discriminatedUnion("type", [
     headline: s(90),
     subheadline: s(220).nullable(),
     badge: s(40).nullable(),
+    /** Hero layout; null = the category default. Images themselves are never the model's to choose. */
+    presentationMode: z.enum(HERO_MODES).nullable(),
   }),
   z.object({
     type: z.literal("about"),
