@@ -110,7 +110,7 @@ function convertSection(section: AiSite["sections"][number], input: GenerationIn
   }
 }
 
-export function assembleSite(raw: AiSite, input: GenerationInput, language: Language): SiteContent {
+export function assembleSite(raw: AiSite, input: GenerationInput, language: Language, ctaLabel?: string): SiteContent {
   const category = CATEGORIES[input.category];
   const sections: Section[] = raw.sections.map((s) => convertSection(s, input));
 
@@ -170,7 +170,9 @@ export function assembleSite(raw: AiSite, input: GenerationInput, language: Lang
     },
     theme: { preset: raw.theme.preset ?? category.preset },
     cta: {
-      label: opt(raw.cta.label) ?? category.cta,
+      // The understand step already produced the category CTA in the owner's language;
+      // keep it rather than letting the writer re-translate it (e.g. "ujian pemanduan").
+      label: opt(ctaLabel) ?? opt(raw.cta.label) ?? category.cta,
       kind: "whatsapp" as const,
       message: opt(raw.cta.message),
     },

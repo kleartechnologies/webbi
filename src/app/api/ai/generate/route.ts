@@ -16,6 +16,7 @@ const bodySchema = z.object({
   language: z.enum(LANGUAGES),
   tone: z.enum(["friendly", "premium", "professional", "playful"]).optional(),
   highlights: z.array(z.string().max(80)).max(6).optional(),
+  ctaLabel: z.string().trim().min(1).max(40).optional(),
   input: generationInputSchema,
 });
 
@@ -33,12 +34,12 @@ export async function POST(request: Request) {
     const provider = getAiProvider();
     let site;
     try {
-      site = assembleSite(await provider.generate(body), body.input, body.language);
+      site = assembleSite(await provider.generate(body), body.input, body.language, body.ctaLabel);
     } catch (error) {
       // One retry on malformed output; model output is non-deterministic.
       if (error instanceof AiError) throw error;
       console.warn("[ai] assemble failed, retrying once", error);
-      site = assembleSite(await provider.generate(body), body.input, body.language);
+      site = assembleSite(await provider.generate(body), body.input, body.language, body.ctaLabel);
     }
     return NextResponse.json({ site, model: provider.name });
   } catch (error) {

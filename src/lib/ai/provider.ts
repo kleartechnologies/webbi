@@ -11,6 +11,8 @@ export interface GenerateRequest {
   input: GenerationInput;
   tone?: "friendly" | "premium" | "professional" | "playful";
   highlights?: string[];
+  /** CTA label from the understand step (category default in the owner's language); reused verbatim. */
+  ctaLabel?: string;
 }
 
 /** Boundary between Webbi and any LLM vendor. Implementations live next to this file. */

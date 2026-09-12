@@ -12,7 +12,8 @@ const presetGuide = PRESET_IDS.map((id) => `- ${id}: ${PRESETS[id].description}`
 const LANGUAGE_RULES = `LANGUAGE
 - Detect the owner's language: "ms" (Bahasa Malaysia), "en" (English) or "mixed" (Manglish / BM with English words).
 - Write ALL copy in that same language and register. For "mixed", write natural everyday Malaysian style (mostly BM with the English terms the owner used). Never switch to formal Indonesian-style Malay.
-- Keep brand names, dish names and model names exactly as written by the owner.`;
+- Keep brand names, dish names and model names exactly as written by the owner.
+- Use the words Malaysian customers actually use: "test drive" stays "test drive" (or "pandu uji"), never "ujian pemanduan" (that is a driving-licence test); appointment → "janji temu" / "temujanji"; quote → "sebut harga".`;
 
 const GROUNDING_RULES = `GROUNDING — the most important rule
 - Only state facts the owner gave you: names, places, prices, years, hours, services, products, certifications.
@@ -73,6 +74,7 @@ export function buildGenerateUserMessage(req: GenerateRequest): string {
   lines.push("");
   lines.push("CONFIRMED DETAILS:");
   lines.push(`- Category: ${input.category} (${c.label}); default CTA "${c.cta}"; offerings label "${c.offeringsLabel}"`);
+  if (req.ctaLabel) lines.push(`- CTA button label (already shown to the owner; use it verbatim as cta.label): ${req.ctaLabel}`);
   lines.push(`- Business name: ${input.name}`);
   if (input.tagline) lines.push(`- Tagline (already approved, keep or lightly polish): ${input.tagline}`);
   if (input.area) lines.push(`- Area: ${input.area}`);

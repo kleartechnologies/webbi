@@ -85,11 +85,14 @@ function Generating({ site }: { site: Site }) {
   // survives StrictMode's double effect run; the request is never cancelled so a
   // remount can't lose a finished draft.
   useEffect(() => {
-    if (status !== "generating" || !site.generation?.input) return;
+    const generation = site.generation;
+    const input = generation?.input;
+    if (status !== "generating" || !generation || !input) return;
     const key = `${site.id}:${attempt}`;
     if (running.current === key) return;
     running.current = key;
-    const generation = site.generation;
+    // The understood CTA is the category default in the owner's language; only reuse it if they kept that category.
+    const ctaLabel = generation.understanding?.category === input.category ? generation.understanding?.ctaLabel : undefined;
     (async () => {
       try {
         const { site: draft, model } = await callApi<{ site: SiteContent; model: string }>("/api/ai/generate", {
@@ -97,7 +100,8 @@ function Generating({ site }: { site: Site }) {
           language: site.language,
           tone: generation.understanding?.tone,
           highlights: generation.understanding?.highlights,
-          input: generation.input,
+          ctaLabel,
+          input,
         });
         await updateSite(site.id, { draft, generation: { ...generation, status: "ready", model, error: undefined } });
         // The snapshot effect above redirects once the doc reads status "ready";
