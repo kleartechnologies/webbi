@@ -194,6 +194,11 @@ export const businessSchema = z.object({
   instagram: short(120).optional(),
   facebook: short(120).optional(),
   tiktok: short(120).optional(),
+  /**
+   * Optional photo of the person behind a person-led business (sales advisor,
+   * agent, tutor...). Sites without one keep the initial avatar.
+   */
+  profilePhoto: imageSchema.optional(),
 });
 export type Business = z.infer<typeof businessSchema>;
 
@@ -265,6 +270,8 @@ export const generationInputSchema = z.object({
     .array(z.object({ id, name: short(80).min(1), price: short(40).optional(), image: imageSchema.optional() }))
     .max(40),
   photos: z.array(imageSchema).max(24),
+  /** Optional professional photo of the owner (person-led categories only). */
+  profilePhoto: imageSchema.optional(),
 });
 export type GenerationInput = z.infer<typeof generationInputSchema>;
 

@@ -1,51 +1,70 @@
 import { Icon } from "@/components/ui/Icon";
-import { mapsEmbedUrl, mapsUrl } from "@/lib/site/links";
+import { cn } from "@/lib/cn";
+import { resolveLocation } from "@/lib/site/location";
 import type { SectionOf } from "@/lib/site/schema";
 import { card, Section, SectionTitle } from "../Section";
 import { tint, type RenderCtx } from "../context";
 
+/**
+ * Location: address card with a real "Open in Google Maps" destination, plus a
+ * keyless Google Maps embed on the published site. Previews (ready screen,
+ * editor, landing mockup) show the card only — never an empty map box.
+ */
 export function Location({ ctx, section }: { ctx: RenderCtx; section: SectionOf<"location"> }) {
-  const { site, strings, mode } = ctx;
-  const address = section.address ?? site.business.address;
-  const query = address ?? section.mapsQuery;
+  const { site, strings, mode, target, rel } = ctx;
+  const place = resolveLocation(section, site.business);
   const hours = section.hours ?? [];
-  if (!query && !hours.length && !section.note) return null;
+  if (!place && !hours.length && !section.note) return null;
+  const embed = mode === "public" && Boolean(place);
+  const twoColumns = Boolean(place) && (hours.length > 0 || Boolean(section.note));
   return (
     <Section id={section.id}>
       <SectionTitle ctx={ctx}>{section.title ?? strings.location}</SectionTitle>
-      <div className="grid gap-4 @3xl:grid-cols-2 @3xl:gap-8">
-        {query ? (
-          <div className="flex flex-col gap-3">
-            <div className={`${card} relative aspect-[4/3] overflow-hidden @3xl:aspect-[16/10]`}>
-              {mode === "public" ? (
+      <div className={cn("grid gap-4 @3xl:gap-8", twoColumns && "@3xl:grid-cols-2")}>
+        {place ? (
+          <div className="flex min-w-0 flex-col gap-3">
+            {embed ? (
+              <div className={`${card} relative aspect-[4/3] overflow-hidden @3xl:aspect-[16/10]`}>
                 <iframe
-                  src={mapsEmbedUrl(query)}
-                  title={`${strings.location}: ${query}`}
+                  src={place.embedSrc}
+                  title={`${strings.location}: ${place.query}`}
                   className="absolute inset-0 h-full w-full border-0"
                   loading="lazy"
                   referrerPolicy="no-referrer-when-downgrade"
+                  allowFullScreen
                 />
-              ) : (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-site-muted" style={{ background: tint(8) }}>
-                  <Icon name="map" size={34} className="text-site-accent opacity-60" />
-                  <span className="text-[12px] font-semibold">Google Maps</span>
+              </div>
+            ) : null}
+            <div className={`${card} flex min-w-0 flex-col gap-4 p-4 @md:flex-row @md:items-center @md:justify-between @md:gap-5 @md:p-5`}>
+              <div className="flex min-w-0 items-start gap-3">
+                <span
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[12px] text-site-accent"
+                  style={{ background: tint(12) }}
+                  aria-hidden
+                >
+                  <Icon name="location_on" size={24} fill />
+                </span>
+                <div className="flex min-w-0 flex-col gap-[2px]">
+                  {!place.precise ? (
+                    <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-site-muted">{strings.area}</span>
+                  ) : null}
+                  <p className="text-[15px] leading-[1.5] break-words [overflow-wrap:anywhere] @3xl:text-[16px]">{place.label}</p>
                 </div>
-              )}
+              </div>
+              <a
+                href={place.href}
+                target={target}
+                rel={rel}
+                className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-pill border-[1.5px] border-site-ink px-5 text-[14px] font-bold text-site-ink"
+              >
+                <Icon name="near_me" size={18} />
+                {strings.openMaps}
+              </a>
             </div>
-            {address ? <p className="text-[15px] leading-[1.5]">{address}</p> : null}
-            <a
-              href={mapsUrl(query)}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-11 items-center gap-2 self-start rounded-pill border-[1.5px] border-site-ink px-5 text-[14px] font-bold text-site-ink"
-            >
-              <Icon name="near_me" size={18} />
-              {strings.openMaps}
-            </a>
           </div>
         ) : null}
         {hours.length || section.note ? (
-          <div className="flex flex-col gap-3">
+          <div className="flex min-w-0 flex-col gap-3">
             {hours.length ? (
               <div className={`${card} px-4 py-2`}>
                 <h3 className="py-2 text-[12px] font-bold uppercase tracking-[0.08em] text-site-muted">{strings.hours}</h3>

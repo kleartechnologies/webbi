@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { siteContentSchema, whatsappSchema } from "../schema";
 import { DEMO_SITES, DEMO_SLUGS } from "../demo";
 import { isReservedSlug, isValidSlug } from "../slug";
-import { safeUrl, telUrl, whatsappUrl } from "../links";
+import { mapsUrl, safeUrl, telUrl, whatsappUrl } from "../links";
 
 describe("demo sites", () => {
   it("every built-in demo validates against the site content schema", () => {
@@ -48,6 +48,20 @@ describe("siteContentSchema", () => {
     expect(siteContentSchema.safeParse(withPhoto("//evil.example/x.jpg")).success).toBe(false);
   });
 
+  it("accepts an optional profile photo on the business and rejects unsafe photo URLs", () => {
+    const photo = { url: "https://firebasestorage.googleapis.com/v0/b/x/o/me.webp?alt=media", path: "users/u1/sites/s1/me.webp", alt: "Amir" };
+    expect(siteContentSchema.safeParse({ ...valid, business: { ...valid.business, profilePhoto: photo } }).success).toBe(true);
+    expect(siteContentSchema.safeParse({ ...valid, business: { ...valid.business, profilePhoto: undefined } }).success).toBe(true);
+    expect(siteContentSchema.safeParse({ ...valid, business: { ...valid.business, profilePhoto: { url: "javascript:alert(1)" } } }).success).toBe(false);
+    expect(siteContentSchema.safeParse({ ...valid, business: { ...valid.business, profilePhoto: { url: "//evil.example/x.jpg" } } }).success).toBe(false);
+    expect(siteContentSchema.safeParse({ ...valid, business: { ...valid.business, profilePhoto: "https://x/y.jpg" } }).success).toBe(false);
+  });
+
+  it("existing sites without a profile photo keep validating unchanged", () => {
+    for (const slug of DEMO_SLUGS) expect(DEMO_SITES[slug].business.profilePhoto).toBeUndefined();
+    expect(siteContentSchema.safeParse(valid).success).toBe(true);
+  });
+
   it("only accepts a hex accent colour", () => {
     expect(siteContentSchema.safeParse({ ...valid, theme: { ...valid.theme, accent: "#C8102E" } }).success).toBe(true);
     expect(siteContentSchema.safeParse({ ...valid, theme: { ...valid.theme, accent: "red" } }).success).toBe(false);
@@ -71,6 +85,14 @@ describe("links", () => {
       "https://wa.me/60123456789?text=Hi%2C%20I'd%20like%20a%20test%20drive",
     );
     expect(telUrl("012-345 6789")).toBe("tel:+0123456789");
+  });
+
+  it("builds a Google Maps search from any address text, encoded", () => {
+    expect(mapsUrl("No. 9257C, Jalan Balakong, 43300 Balakong, Selangor")).toBe(
+      "https://www.google.com/maps/search/?api=1&query=No.%209257C%2C%20Jalan%20Balakong%2C%2043300%20Balakong%2C%20Selangor",
+    );
+    expect(mapsUrl("Kajang")).toBe("https://www.google.com/maps/search/?api=1&query=Kajang");
+    expect(mapsUrl("a&b=c#d")).toBe("https://www.google.com/maps/search/?api=1&query=a%26b%3Dc%23d");
   });
 
   it("only renders http(s) URLs as links", () => {

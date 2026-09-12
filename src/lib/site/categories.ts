@@ -35,6 +35,12 @@ export interface Category {
   preset: PresetId;
   /** What the offerings are called on this kind of site. */
   offeringsLabel: string;
+  /**
+   * True when customers deal with a named person rather than a venue (sales
+   * advisor, agent, tutor, photographer...). These sites can carry a profile
+   * photo; business-led ones (restaurants, shops, clinics) keep logo/photos.
+   */
+  personLed: boolean;
 }
 
 export const CATEGORIES: Record<CategoryId, Category> = {
@@ -46,6 +52,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     ctaIcon: "chat",
     icon: "restaurant_menu",
     preset: "warm",
+    personLed: false,
     offeringsLabel: "Menu",
   },
   car: {
@@ -56,6 +63,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     ctaIcon: "directions_car",
     icon: "directions_car",
     preset: "bold",
+    personLed: true,
     offeringsLabel: "Models",
   },
   beauty: {
@@ -66,6 +74,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     ctaIcon: "calendar_month",
     icon: "spa",
     preset: "elegant",
+    personLed: false,
     offeringsLabel: "Services",
   },
   homeServices: {
@@ -76,6 +85,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     ctaIcon: "request_quote",
     icon: "home_repair_service",
     preset: "trust",
+    personLed: false,
     offeringsLabel: "Services",
   },
   photographer: {
@@ -86,6 +96,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     ctaIcon: "event_available",
     icon: "photo_camera",
     preset: "elegant",
+    personLed: true,
     offeringsLabel: "Packages",
   },
   property: {
@@ -96,6 +107,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     ctaIcon: "chat",
     icon: "apartment",
     preset: "trust",
+    personLed: true,
     offeringsLabel: "Listings",
   },
   tutor: {
@@ -106,6 +118,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     ctaIcon: "chat",
     icon: "school",
     preset: "bright",
+    personLed: true,
     offeringsLabel: "Subjects",
   },
   retail: {
@@ -116,6 +129,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     ctaIcon: "shopping_bag",
     icon: "storefront",
     preset: "bright",
+    personLed: false,
     offeringsLabel: "Products",
   },
   fitness: {
@@ -126,6 +140,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     ctaIcon: "fitness_center",
     icon: "fitness_center",
     preset: "bold",
+    personLed: true,
     offeringsLabel: "Programmes",
   },
   professional: {
@@ -136,6 +151,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     ctaIcon: "chat",
     icon: "work",
     preset: "trust",
+    personLed: true,
     offeringsLabel: "Services",
   },
   creative: {
@@ -146,6 +162,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     ctaIcon: "chat",
     icon: "brush",
     preset: "elegant",
+    personLed: true,
     offeringsLabel: "Services",
   },
   health: {
@@ -156,6 +173,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     ctaIcon: "calendar_month",
     icon: "medical_services",
     preset: "trust",
+    personLed: false,
     offeringsLabel: "Services",
   },
   other: {
@@ -166,6 +184,7 @@ export const CATEGORIES: Record<CategoryId, Category> = {
     ctaIcon: "chat",
     icon: "storefront",
     preset: "trust",
+    personLed: false,
     offeringsLabel: "Services",
   },
 };

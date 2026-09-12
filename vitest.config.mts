@@ -3,7 +3,7 @@ import path from "node:path";
 
 export default defineConfig({
   test: {
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
     environment: "node",
     env: {
       NEXT_PUBLIC_FIREBASE_API_KEY: "test",

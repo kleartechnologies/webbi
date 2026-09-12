@@ -3,13 +3,14 @@ import { ICON_PATHS } from "@/components/ui/icons.generated";
 import { getCategory, type Category } from "@/lib/site/categories";
 import { siteStrings, type SiteStrings } from "@/lib/site/i18n";
 import { callNumber, chatUrl, ctaHref, telUrl } from "@/lib/site/links";
+import { resolveLocation } from "@/lib/site/location";
 import { PRESETS, type Preset } from "@/lib/site/presets";
 import type { SectionOf, SectionType, SiteContent } from "@/lib/site/schema";
 
 /**
  * "public" is the live site at /w/[slug]. "preview" is the same renderer inside
  * the product (ready screen, editor, landing phone): outbound links open in a
- * new tab and heavy third-party embeds are replaced with placeholders.
+ * new tab and heavy third-party embeds (the Google Maps iframe) are left out.
  */
 export type RenderMode = "public" | "preview";
 
@@ -95,7 +96,7 @@ export function buildNav(ctx: RenderCtx): NavItem[] {
   const reviews = findSection(site, "reviews");
   if (reviews && reviews.items.length) items.push({ href: anchor(reviews.id), label: strings.reviews, icon: "star" });
   const location = findSection(site, "location");
-  if (location && (location.address || location.mapsQuery || location.hours?.length || site.business.address)) {
+  if (location && (resolveLocation(location, site.business) || location.hours?.length || location.note)) {
     items.push({ href: anchor(location.id), label: strings.location, icon: "location_on" });
   }
   if (call) items.push({ href: call, label: strings.call, icon: "call" });

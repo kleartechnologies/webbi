@@ -128,6 +128,7 @@ function ConfirmForm({ site }: { site: Site }) {
         previous?.offerings ??
         (understanding?.offerings ?? []).map((o) => ({ id: newId("item"), name: o.name, price: o.price })),
       photos: previous?.photos ?? [],
+      profilePhoto: previous?.profilePhoto,
     };
     try {
       await updateSite(site.id, { generation: { ...site.generation, status: "understood", input } });

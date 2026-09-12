@@ -10,6 +10,7 @@
     "test": "vitest run",
     "qa:publish": "node scripts/qa/publish-flow.mjs",
     "qa:industries": "node scripts/qa/industries.mjs",
+    "qa:profile-location": "node scripts/qa/profile-location.mjs",
     "qa:cleanup": "node scripts/qa/cleanup-anonymous.mjs"
   },
   "dependencies": {

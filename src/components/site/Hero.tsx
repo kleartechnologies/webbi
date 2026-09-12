@@ -2,10 +2,51 @@ import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
 import type { SectionOf } from "@/lib/site/schema";
 import { headingClass, tint, type RenderCtx } from "./context";
+import { ProfilePhoto } from "./ProfilePhoto";
 import { SiteImage } from "./SiteImage";
 
 type HeroSection = SectionOf<"hero">;
 const HERO_SIZES = "(max-width: 768px) 100vw, 1120px";
+
+const words = (text: string) => text.toLowerCase().split(/[^\p{L}\p{N}']+/u).filter(Boolean);
+
+/** Does the headline already say who this is, i.e. contain their first name as a whole word? */
+export function headlineNames(headline: string, name: string): boolean {
+  const nameWords = words(name);
+  const first = nameWords.find((w) => w.length >= 3) ?? nameWords[0];
+  return Boolean(first) && words(headline).includes(first);
+}
+
+/**
+ * Person-led sites: the owner's photo above the copy, with their name and
+ * tagline when the headline doesn't already say who they are.
+ */
+function HeroIdentity({ ctx, section, light, center }: { ctx: RenderCtx; section: HeroSection; light: boolean; center?: boolean }) {
+  const { business } = ctx.site;
+  const photo = ctx.category.personLed ? business.profilePhoto : undefined;
+  if (!photo) return null;
+  const name = business.name.trim();
+  const named = headlineNames(section.headline, name);
+  return (
+    <div className={cn("mb-2 flex items-center gap-3", center && "flex-col text-center @3xl:flex-row @3xl:text-left")}>
+      <ProfilePhoto
+        image={photo}
+        name={name}
+        size={88}
+        priority
+        className={cn(light ? "ring-white/80" : "ring-white shadow-[0_6px_20px_rgba(0,0,0,0.12)]")}
+      />
+      {!named ? (
+        <div className="flex min-w-0 flex-col">
+          <span className={cn("text-[17px] font-bold leading-[1.25]", light ? "text-white" : "text-site-ink")}>{name}</span>
+          {business.tagline ? (
+            <span className={cn("text-[14px] leading-[1.4]", light ? "text-white/85" : "text-site-muted")}>{business.tagline}</span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 /** Kicker + headline + subheadline, in light (on photo/dark) or ink (on ground). */
 function HeroCopy({ ctx, section, light, center }: { ctx: RenderCtx; section: HeroSection; light: boolean; center?: boolean }) {
@@ -13,6 +54,7 @@ function HeroCopy({ ctx, section, light, center }: { ctx: RenderCtx; section: He
   const bold = ctx.preset.heroDark;
   return (
     <div className={cn("flex flex-col gap-2", center && "items-center text-center @3xl:items-start @3xl:text-left")}>
+      <HeroIdentity ctx={ctx} section={section} light={light} center={center} />
       {kicker ? (
         <span
           className={cn("text-[12px] font-bold uppercase tracking-[0.12em]", light && !bold ? "text-white/85" : !light ? "text-site-accent" : undefined)}

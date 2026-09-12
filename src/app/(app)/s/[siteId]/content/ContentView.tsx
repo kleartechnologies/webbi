@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppPage } from "@/components/app/AppHeader";
 import { FlowHeader, StickyFooter } from "@/components/app/FlowChrome";
+import { ProfilePhotoField } from "@/components/app/ProfilePhotoField";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { SiteMissing } from "@/components/app/SiteMissing";
 import { Button, DashedAdd, ErrorText, Icon, Spinner } from "@/components/ui";
@@ -63,6 +64,8 @@ function ContentForm({ site }: { site: Site }) {
     (input?.offerings ?? []).map((o) => ({ ...o, fromDescription: mentioned.has(o.name.trim().toLowerCase()) })),
   );
   const [photos, setPhotos] = useState<SiteImage[]>(() => input?.photos ?? []);
+  const [profilePhoto, setProfilePhoto] = useState<SiteImage | undefined>(() => input?.profilePhoto);
+  const [profileUploading, setProfileUploading] = useState(false);
   const [uploading, setUploading] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -77,7 +80,7 @@ function ContentForm({ site }: { site: Site }) {
   }, [input, site.id, router]);
 
   const buildInput = useCallback(
-    (nextItems: Item[], nextPhotos: SiteImage[]): GenerationInput | null => {
+    (nextItems: Item[], nextPhotos: SiteImage[], nextProfile: SiteImage | undefined): GenerationInput | null => {
       if (!input) return null;
       return {
         ...input,
@@ -85,15 +88,17 @@ function ContentForm({ site }: { site: Site }) {
           .filter((i) => i.name.trim())
           .map(({ id, name, price, image }) => ({ id, name: name.trim(), price: price?.trim() || undefined, image })),
         photos: nextPhotos,
+        // Only person-led categories carry a profile photo; a restaurant never gets one.
+        profilePhoto: category.personLed ? nextProfile : undefined,
       };
     },
-    [input],
+    [input, category.personLed],
   );
 
   /** Persist photos right away so an upload is never lost on refresh. */
   const persist = useCallback(
-    async (nextItems: Item[], nextPhotos: SiteImage[]) => {
-      const next = buildInput(nextItems, nextPhotos);
+    async (nextItems: Item[], nextPhotos: SiteImage[], nextProfile: SiteImage | undefined) => {
+      const next = buildInput(nextItems, nextPhotos, nextProfile);
       if (!next) return;
       try {
         await updateSite(site.id, { generation: { ...site.generation, status: "understood", input: next } });
@@ -147,14 +152,19 @@ function ContentForm({ site }: { site: Site }) {
         });
       }
     }
-    void persist(items, next);
+    void persist(items, next, profilePhoto);
   };
 
   const removePhoto = (image: SiteImage) => {
     const next = photos.filter((p) => p !== image);
     setPhotos(next);
     void deleteSiteImage(image);
-    void persist(items, next);
+    void persist(items, next, profilePhoto);
+  };
+
+  const changeProfilePhoto = (image: SiteImage | undefined) => {
+    setProfilePhoto(image);
+    void persist(items, photos, image);
   };
 
   const uploadItemPhoto = async (files: FileList | null) => {
@@ -180,9 +190,9 @@ function ContentForm({ site }: { site: Site }) {
   };
 
   const build = async () => {
-    const next = buildInput(items, photos);
+    const next = buildInput(items, photos, profilePhoto);
     if (!next) return;
-    if (Object.keys(uploading).length) {
+    if (Object.keys(uploading).length || profileUploading) {
       setError("Hold on, a photo is still uploading.");
       return;
     }
@@ -198,7 +208,7 @@ function ContentForm({ site }: { site: Site }) {
     }
   };
 
-  const isUploading = Object.keys(uploading).length > 0;
+  const isUploading = Object.keys(uploading).length > 0 || profileUploading;
 
   return (
     <>
@@ -275,6 +285,10 @@ function ContentForm({ site }: { site: Site }) {
           })}
           <DashedAdd onClick={addItem}>Add item</DashedAdd>
         </div>
+
+        {category.personLed && user ? (
+          <ProfilePhotoField uid={user.uid} siteId={site.id} value={profilePhoto} onChange={changeProfilePhoto} onBusy={setProfileUploading} />
+        ) : null}
 
         <div className="flex flex-col gap-[10px]">
           <div className="flex items-baseline justify-between">

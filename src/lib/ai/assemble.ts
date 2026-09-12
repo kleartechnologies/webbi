@@ -167,6 +167,7 @@ export function assembleSite(raw: AiSite, input: GenerationInput, language: Lang
       instagram: input.instagram,
       facebook: input.facebook,
       tiktok: input.tiktok,
+      profilePhoto: category.personLed ? input.profilePhoto : undefined,
     },
     theme: { preset: raw.theme.preset ?? category.preset },
     cta: {

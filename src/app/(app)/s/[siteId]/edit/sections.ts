@@ -114,6 +114,7 @@ export function setSitePhotos(site: SiteContent, photos: SiteImage[]): SiteConte
 /** Every uploaded image referenced by the site (for cleanup on delete). */
 export function allImages(site: SiteContent): SiteImage[] {
   const images: SiteImage[] = [];
+  if (site.business.profilePhoto) images.push(site.business.profilePhoto);
   for (const section of site.sections) {
     if (section.type === "hero" && section.image) images.push(section.image);
     if (section.type === "gallery") images.push(...section.images);

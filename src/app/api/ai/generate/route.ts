@@ -5,6 +5,7 @@ import { assembleSite } from "@/lib/ai/assemble";
 import { AiError } from "@/lib/ai/errors";
 import { assertRateLimit, handleApiError } from "@/lib/api/http";
 import { requireUser } from "@/lib/auth/verify";
+import { foreignImage } from "@/lib/images/ownership";
 import { LANGUAGES, generationInputSchema } from "@/lib/site/schema";
 
 export const runtime = "nodejs";
@@ -26,9 +27,7 @@ export async function POST(request: Request) {
     assertRateLimit(`generate:${user.uid}`, 5, 10 * 60_000);
     const body = bodySchema.parse(await request.json());
     // Uploaded photos must belong to the caller — never let a URL for someone else's file in.
-    const foreign = [...body.input.photos, ...body.input.offerings.map((o) => o.image)].find(
-      (img) => img?.path && !img.path.startsWith(`users/${user.uid}/`),
-    );
+    const foreign = foreignImage(user.uid, body.input);
     if (foreign) throw new AiError("bad_output", "One of the photos doesn't belong to this account.");
 
     const provider = getAiProvider();

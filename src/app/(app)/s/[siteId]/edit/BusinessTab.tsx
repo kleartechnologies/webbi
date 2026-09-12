@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { ProfilePhotoField } from "@/components/app/ProfilePhotoField";
 import { DashedAdd, Field, Input, Textarea } from "@/components/ui";
 import { normalizeMyPhone } from "@/lib/ai/assemble";
+import { CATEGORIES } from "@/lib/site/categories";
 import { newId, type SiteContent } from "@/lib/site/schema";
 import { IconButton, SectionHeading } from "./EditorBits";
 import { ensureSection, findSection, patchSection, sectionIndex } from "./sections";
@@ -12,13 +14,16 @@ interface Props {
   site: SiteContent;
   update: Update;
   issues: Issues;
+  uid: string;
+  siteId: string;
 }
 
 const clean = (value: string) => (value.trim() ? value : undefined);
 const localPart = (whatsapp?: string) => (whatsapp ? (whatsapp.startsWith("60") ? whatsapp.slice(2) : whatsapp) : "");
 
 /** Business, hero, about, contact details, location and opening hours. */
-export function BusinessTab({ site, update, issues }: Props) {
+export function BusinessTab({ site, update, issues, uid, siteId }: Props) {
+  const personLed = CATEGORIES[site.business.category].personLed;
   const hero = findSection(site, "hero");
   const about = findSection(site, "about");
   const location = findSection(site, "location");
@@ -88,6 +93,9 @@ export function BusinessTab({ site, update, issues }: Props) {
           onChange={(e) => setBusiness({ tagline: clean(e.target.value) })}
         />
       </Field>
+      {personLed ? (
+        <ProfilePhotoField uid={uid} siteId={siteId} value={site.business.profilePhoto} onChange={(profilePhoto) => setBusiness({ profilePhoto })} />
+      ) : null}
 
       {hero ? (
         <>

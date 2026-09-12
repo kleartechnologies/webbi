@@ -1,13 +1,15 @@
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { cn } from "@/lib/cn";
 import type { NavItem, RenderCtx } from "./context";
+import { ProfilePhoto } from "./ProfilePhoto";
 
 export function SiteHeader({ ctx, nav }: { ctx: RenderCtx; nav: NavItem[] }) {
-  const { site, preset, primary, chat, strings, target, rel } = ctx;
+  const { site, category, preset, primary, chat, strings, target, rel } = ctx;
   const dark = preset.heroDark;
   const elegant = preset.id === "elegant";
   const name = site.business.name;
   const initial = name.trim().charAt(0).toUpperCase();
+  const photo = category.personLed ? site.business.profilePhoto : undefined;
   const tagline = site.business.tagline && site.business.tagline.length <= 32 ? site.business.tagline : undefined;
 
   const action: { href: string; icon: IconName; fill: boolean; green: boolean; label: string } | null = primary.href
@@ -23,7 +25,9 @@ export function SiteHeader({ ctx, nav }: { ctx: RenderCtx; nav: NavItem[] }) {
     >
       <div className="mx-auto flex h-14 w-full max-w-[1120px] items-center gap-3 px-4 @3xl:h-16 @3xl:px-8">
         <div className="flex min-w-0 items-center gap-[10px]">
-          {!elegant ? (
+          {photo ? (
+            <ProfilePhoto image={photo} name={name} size={32} className={dark ? "ring-white/20" : "ring-site-line"} />
+          ) : !elegant ? (
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-site-accent font-site text-[16px] font-bold text-white">
               {initial}
             </span>
