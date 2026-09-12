@@ -13,6 +13,11 @@ import "server-only";
  *
  * If none of these apply the feature that needs Admin fails with
  * AdminNotConfiguredError, which routes turn into an honest 503.
+ *
+ * Only app, firestore and storage are imported. ID tokens are verified with
+ * jose (src/lib/auth/verify.ts); firebase-admin/auth is not needed and it
+ * pulls in jwks-rsa, whose CommonJS require() of the ESM-only jose v6 fails
+ * in runtimes that disable require(esm) (Netlify's local function runner).
  */
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
@@ -24,8 +29,7 @@ import {
   initializeApp,
   type App,
 } from "firebase-admin/app";
-import { getAuth, type DecodedIdToken } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { publicEnv, serverEnv } from "@/lib/env";
 
@@ -103,41 +107,28 @@ export function getAdminApp(): App {
   throw new AdminNotConfiguredError();
 }
 
-export function adminAuth() {
-  return getAuth(getAdminApp());
-}
+/**
+ * Marker on the Firestore instance itself, not a module variable: dev hot
+ * reload re-evaluates this module while firebase-admin keeps the already
+ * configured instance, and settings() throws when called a second time.
+ */
+const DB_CONFIGURED = Symbol.for("webbi.adminDb.configured");
+type MarkedFirestore = Firestore & { [DB_CONFIGURED]?: true };
 
-let dbConfigured = false;
-
-export function adminDb() {
-  const db = getFirestore(getAdminApp());
-  if (!dbConfigured) {
-    // Site content has many optional fields; drop `undefined` instead of throwing.
-    db.settings({ ignoreUndefinedProperties: true });
-    dbConfigured = true;
+export function adminDb(): Firestore {
+  const db = getFirestore(getAdminApp()) as MarkedFirestore;
+  if (!db[DB_CONFIGURED]) {
+    try {
+      // Site content has many optional fields; drop `undefined` instead of throwing.
+      db.settings({ ignoreUndefinedProperties: true });
+    } catch {
+      // Already in use (hot reload); the earlier settings call still applies.
+    }
+    db[DB_CONFIGURED] = true;
   }
   return db;
 }
 
 export function adminStorage() {
   return getStorage(getAdminApp());
-}
-
-export class UnauthorizedError extends Error {
-  constructor(message = "Sign in required.") {
-    super(message);
-    this.name = "UnauthorizedError";
-  }
-}
-
-/** Verify the Firebase ID token sent as `Authorization: Bearer <token>`. */
-export async function requireUser(request: Request): Promise<DecodedIdToken> {
-  const header = request.headers.get("authorization") ?? "";
-  const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!token) throw new UnauthorizedError();
-  try {
-    return await adminAuth().verifyIdToken(token);
-  } catch {
-    throw new UnauthorizedError("Your session has expired. Please sign in again.");
-  }
 }

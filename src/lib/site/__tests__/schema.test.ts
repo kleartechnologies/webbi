@@ -38,6 +38,16 @@ describe("siteContentSchema", () => {
     expect(siteContentSchema.safeParse({ ...valid, sections: thirteen }).success).toBe(false);
   });
 
+  it("only accepts http(s) or root-relative image URLs", () => {
+    const withPhoto = (url: string) => ({ ...valid, gallery: undefined, sections: [...valid.sections, { id: "g1", type: "gallery", images: [{ url }] }] });
+    expect(siteContentSchema.safeParse(withPhoto("https://firebasestorage.googleapis.com/v0/b/x/o/y.jpg?alt=media")).success).toBe(true);
+    expect(siteContentSchema.safeParse(withPhoto("http://127.0.0.1:9199/v0/b/x/o/y.jpg")).success).toBe(true);
+    expect(siteContentSchema.safeParse(withPhoto("/demo/rasa-kampung/hero.jpg")).success).toBe(true);
+    expect(siteContentSchema.safeParse(withPhoto("javascript:alert(1)")).success).toBe(false);
+    expect(siteContentSchema.safeParse(withPhoto("data:image/svg+xml;base64,AAAA")).success).toBe(false);
+    expect(siteContentSchema.safeParse(withPhoto("//evil.example/x.jpg")).success).toBe(false);
+  });
+
   it("only accepts a hex accent colour", () => {
     expect(siteContentSchema.safeParse({ ...valid, theme: { ...valid.theme, accent: "#C8102E" } }).success).toBe(true);
     expect(siteContentSchema.safeParse({ ...valid, theme: { ...valid.theme, accent: "red" } }).success).toBe(false);

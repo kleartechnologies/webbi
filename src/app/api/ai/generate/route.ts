@@ -8,7 +8,8 @@ import { requireUser } from "@/lib/auth/verify";
 import { LANGUAGES, generationInputSchema } from "@/lib/site/schema";
 
 export const runtime = "nodejs";
-export const maxDuration = 120;
+// Netlify caps synchronous functions at 60 s; the OpenAI adapter keeps its own deadline inside that.
+export const maxDuration = 60;
 
 const bodySchema = z.object({
   description: z.string().trim().min(12).max(4000),

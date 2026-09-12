@@ -8,6 +8,9 @@ import { fulfilPayment, getPayment, markPaymentFailed } from "@/lib/site/publish
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+/** One Firestore auto-id (or similar) — no slashes, never empty. */
+const PAYMENT_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
 const bodySchema = z.object({
   siteId: z.string().min(1).max(64),
   sessionId: z.string().min(1).max(200),
@@ -25,8 +28,10 @@ export async function POST(request: Request) {
     const { siteId, sessionId } = bodySchema.parse(await request.json());
     const verification = await getPaymentProvider().verifyCheckout(sessionId);
 
-    // A paid session we can't tie back to one of our payment records is never fulfilled.
-    if (verification.state === "paid" && !verification.paymentId) {
+    // A session we can't tie back to one of our payment records is never fulfilled.
+    // The id comes from the provider's session, so it is also validated as a
+    // single Firestore document id before it goes anywhere near a path.
+    if (verification.paymentId !== null && !PAYMENT_ID.test(verification.paymentId)) {
       return apiError(404, "not_found", "We couldn't match that payment to a website.");
     }
     if (verification.paymentId) {

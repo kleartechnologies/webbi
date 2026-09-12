@@ -39,6 +39,13 @@ export const publicEnv = {
 
 /** Server-only configuration. Never import this from a client component. */
 export const serverEnv = {
+  /** OpenAI is the production AI provider. Set OPENAI_API_KEY on Netlify. */
+  get openaiApiKey(): string | undefined {
+    return process.env.OPENAI_API_KEY || undefined;
+  },
+  get openaiModel(): string {
+    return process.env.OPENAI_MODEL || "gpt-5-mini";
+  },
   get anthropicApiKey(): string | undefined {
     return process.env.ANTHROPIC_API_KEY || undefined;
   },

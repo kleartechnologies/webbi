@@ -14,5 +14,11 @@ export default defineConfig({
       NEXT_PUBLIC_SITE_URL: "https://webbi.my",
     },
   },
-  resolve: { alias: { "@": path.resolve(__dirname, "src") } },
+  resolve: {
+    alias: {
+      "@": path.resolve(import.meta.dirname, "src"),
+      // `import "server-only"` is a build-time guard in Next; it has no meaning under vitest.
+      "server-only": path.resolve(import.meta.dirname, "src/test/server-only.ts"),
+    },
+  },
 });

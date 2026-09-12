@@ -49,6 +49,7 @@ firestore-debug.log
 ui-debug.log
 .firebase/
 .netlify/
+deno.lock
 
 
 # QA screenshots

@@ -49,7 +49,23 @@ function Generating({ site }: { site: Site }) {
   const [error, setError] = useState<string | null>(site.generation?.status === "error" ? (site.generation.error ?? null) : null);
   const [attempt, setAttempt] = useState(0);
   const running = useRef<string | null>(null);
+  // Set when the browser is leaving the page (refresh, back, close). The
+  // browser then cancels the in-flight request, which must not be recorded as
+  // a generation error: the next mount simply runs the generation again.
+  const leaving = useRef(false);
   const status = site.generation?.status;
+
+  useEffect(() => {
+    const onLeave = () => {
+      leaving.current = true;
+    };
+    window.addEventListener("beforeunload", onLeave);
+    window.addEventListener("pagehide", onLeave);
+    return () => {
+      window.removeEventListener("beforeunload", onLeave);
+      window.removeEventListener("pagehide", onLeave);
+    };
+  }, []);
   const hasDraft = Boolean(site.draft);
 
   // Already built (e.g. refresh after completion) → straight to the reveal.
@@ -88,6 +104,7 @@ function Generating({ site }: { site: Site }) {
         // a separate timer here could fire after the user has already moved on.
         setStep(5);
       } catch (err) {
+        if (leaving.current) return;
         const message = errorMessage(err);
         setError(message);
         await updateSite(site.id, { generation: { ...generation, status: "error", error: message } }).catch(() => {});

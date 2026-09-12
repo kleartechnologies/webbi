@@ -59,7 +59,7 @@ One Next.js app serves everything. Each customer website is a validated JSON doc
 | `/s/{siteId}/account` → `/publish` → `/publish/return` → `/live` | Sign in (guest sites are kept), choose slug, pay, confirm, share |
 | `/dashboard`, `/signin` | Owner's sites and sign-in |
 | `/w/{slug}` | Public renderer. Reads `publicSites/{slug}` (cached, invalidated on publish) or a built-in demo site |
-| `/api/ai/understand`, `/api/ai/generate` | Server-only AI calls (Anthropic key never reaches the browser) |
+| `/api/ai/understand`, `/api/ai/generate` | Server-only AI calls (the OpenAI key never reaches the browser) |
 | `/api/publish/slug`, `/checkout`, `/confirm`, `/republish` | Slug availability, Stripe Checkout session, payment confirmation, push edits to a paid site |
 | `/api/payments/webhook` | Stripe webhook (signature verified) |
 
@@ -86,15 +86,17 @@ Public Firebase values (`NEXT_PUBLIC_FIREBASE_*`) are safe to expose and are gov
 | Variable | Needed for | How to get it |
 | --- | --- | --- |
 | `FIREBASE_SERVICE_ACCOUNT_BASE64` | AI routes, slug claims, publishing, payment verification | Firebase Console → Project settings → Service accounts → Generate new private key, then `base64 -i key.json \| tr -d '\n'`. Locally you can instead run `gcloud auth application-default login`. |
-| `ANTHROPIC_API_KEY` | "AI understands" + site generation | console.anthropic.com → API keys |
-| `ANTHROPIC_MODEL` | model override (default `claude-sonnet-5`) | optional |
+| `OPENAI_API_KEY` | "AI understands" + site generation (production provider) | platform.openai.com → API keys. Read server-side only, in `src/lib/ai/openai.ts`. |
+| `OPENAI_MODEL` | model override (default `gpt-5-mini`) | optional |
+| `AI_PROVIDER` | `openai` \| `anthropic` \| `mock` | optional; unset = pick from the configured key (`OPENAI_API_KEY` first) |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | alternative provider | optional; only used when `AI_PROVIDER=anthropic` or no OpenAI key is set |
 | `PAYMENT_PROVIDER`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Publish → payment | See "Payments" below. With `PAYMENT_PROVIDER=none` the Publish screen explains that payments are not switched on yet; nothing is ever marked paid or published without a verified payment. |
 
 Firebase Authentication must be enabled once in the Firebase Console (Authentication → Get started) with the **Anonymous**, **Google** and **Email/Password** providers, and the Netlify domain added under Authorized domains.
 
 ## Payments
 
-Payment is one RM149.90 charge at Publish, taken through Stripe Checkout (hosted page). The provider boundary is `src/lib/payments/`: `provider.ts` is the interface, `stripe.ts` the only production adapter, `mock.ts` a dev-only stand-in. Everything else in the app talks to the interface.
+Payment is one RM149.90 charge at Publish through a hosted payment page. The provider boundary is `src/lib/payments/`: `provider.ts` is the interface, `stripe.ts` a reference adapter (Stripe Checkout), `mock.ts` a dev-only stand-in that is refused in production. The planned production provider for Malaysia is **Billplz** (FPX); it is not integrated yet and will be added as another adapter behind the same interface. Everything else in the app talks to the interface.
 
 How a site goes live, and why it can't be faked:
 
@@ -145,14 +147,14 @@ npx netlify link             # once, pick webbi-my
 npx netlify deploy --build --prod
 ```
 
-Environment variables to set under Site configuration → Environment variables (all of `.env.example` except the emulator block): the six `NEXT_PUBLIC_FIREBASE_*`, `NEXT_PUBLIC_SITE_URL` (the real public origin, no trailing slash), `FIREBASE_SERVICE_ACCOUNT_BASE64`, `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `PAYMENT_PROVIDER` and the three Stripe keys. `NODE_VERSION=22` is set in `netlify.toml`.
+Environment variables to set under Site configuration → Environment variables (all of `.env.example` except the emulator block): the six `NEXT_PUBLIC_FIREBASE_*`, `NEXT_PUBLIC_SITE_URL` (the real public origin, no trailing slash), `FIREBASE_SERVICE_ACCOUNT_BASE64`, `OPENAI_API_KEY` (optionally `OPENAI_MODEL`), `PAYMENT_PROVIDER` and, once payments are on, the payment provider's keys. `NODE_VERSION=22` is set in `netlify.toml`.
 
 ### Before launch
 
 1. Firebase Console → Authentication → Sign-in method: enable **Anonymous**, **Google**, **Email/Password**; Settings → Authorized domains: add the Netlify domain (and the custom domain later).
 2. Firebase Console → Project settings → Service accounts → generate a key → `FIREBASE_SERVICE_ACCOUNT_BASE64` on Netlify. Without it every `/api/*` route fails with a clear "server not configured" error.
-3. `ANTHROPIC_API_KEY` on Netlify (`AI_PROVIDER` unset or `anthropic`).
-4. Stripe keys + webhook as described under "Payments", then `PAYMENT_PROVIDER=stripe`. Until then the Publish screen honestly says payments aren't on yet.
+3. `OPENAI_API_KEY` on Netlify (`AI_PROVIDER` unset or `openai`). Already set.
+4. Payments: the planned Malaysian provider is Billplz (not integrated yet). Until a real provider is wired in, `PAYMENT_PROVIDER` stays `none` in production and the Publish screen honestly says payments aren't on yet. `mock` is refused in production builds.
 5. `firebase deploy --only firestore:rules,firestore:indexes,storage --project webbi-85f26` (already deployed once; re-run after changing rules).
 6. Netlify → Site configuration → Site protection: turn off team-only access so customers' sites are public.
 7. `NEXT_PUBLIC_SITE_URL` must match the domain customers will see in their share links.

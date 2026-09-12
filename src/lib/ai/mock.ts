@@ -45,7 +45,7 @@ export const mockProvider: AiProvider = {
               ? "tutor"
               : /salon|spa|makeup|beauty|kecantikan/.test(lower)
                 ? "beauty"
-                : /property|hartanah|rumah|agent/.test(lower)
+                : /property|hartanah|real estate|negotiator|condo|rumah|agent/.test(lower)
                   ? "property"
                   : "other";
     const areaMatch = text.match(/\b(?:di|in|area|around)\s+([A-Z][\w']+(?:\s+[A-Z][\w']+)?)/);

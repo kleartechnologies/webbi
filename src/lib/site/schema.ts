@@ -22,8 +22,12 @@ export const whatsappSchema = z
   .string()
   .regex(/^\d{9,15}$/, "Enter a valid mobile number");
 
-/** Absolute https URL (Storage) or a root-relative path (bundled demo photos). */
-const imageUrlSchema = z.union([z.url(), z.string().regex(/^\/[^\s]+$/)]);
+/**
+ * Absolute http(s) URL (Firebase Storage, or the Storage emulator locally) or a
+ * root-relative path (bundled demo photos). Other schemes (javascript:, data:)
+ * are rejected so a crafted draft can never put them into a rendered page.
+ */
+const imageUrlSchema = z.union([z.url({ protocol: /^https?$/ }), z.string().regex(/^\/(?!\/)[^\s]+$/)]);
 
 export const imageSchema = z.object({
   url: imageUrlSchema,
