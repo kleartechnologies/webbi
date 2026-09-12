@@ -7,10 +7,11 @@ import { FooterNote, StickyFooter } from "@/components/app/FlowChrome";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { SiteMissing } from "@/components/app/SiteMissing";
 import { SiteRenderer } from "@/components/site/SiteRenderer";
-import { Button, Icon, Spinner } from "@/components/ui";
+import { Button, ButtonLink, Icon, Spinner } from "@/components/ui";
+import { callApi, errorMessage } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { cn } from "@/lib/cn";
-import { resumePath } from "@/lib/site/flow";
+import { hasUnpublishedChanges, publicSiteUrl, resumePath } from "@/lib/site/flow";
 import type { SiteContent } from "@/lib/site/schema";
 import type { Site } from "@/lib/site/types";
 import { useSite } from "@/lib/site/useSite";
@@ -82,9 +83,14 @@ function Editor({ site, initial }: { site: Site; initial: SiteContent }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [publishNotice, setPublishNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
-  const backHref = site.status === "published" ? "/dashboard" : `/s/${site.id}/ready`;
-  const backLabel = site.status === "published" ? "Dashboard" : "Preview";
+  const live = site.status === "published" && Boolean(site.slug);
+  const backHref = live ? "/dashboard" : `/s/${site.id}/ready`;
+  const backLabel = live ? "Dashboard" : "Preview";
+  // Live sites: the draft is what the owner edits; visitors see `published`.
+  const pendingChanges = live && (saveState !== "saved" || hasUnpublishedChanges(site));
 
   const tabs: { id: TabId; label: string }[] = [
     { id: "business", label: "Business" },
@@ -113,8 +119,36 @@ function Editor({ site, initial }: { site: Site; initial: SiteContent }) {
     router.push(href);
   };
 
+  /** Save, then copy the draft to the live page (paid sites only). */
+  const publishChanges = async () => {
+    setPublishing(true);
+    setPublishNotice(null);
+    const result = await flush();
+    if (result === "invalid") {
+      setNotice("Fix the highlighted fields first.");
+      const first = Object.keys(issues)[0];
+      if (first) setTab(tabForIssue(first, draft));
+      setPublishing(false);
+      return;
+    }
+    if (result === "error") {
+      setNotice("Your latest changes couldn't be saved. Check your connection and try again.");
+      setPublishing(false);
+      return;
+    }
+    try {
+      await callApi<{ status: "published"; slug: string }>("/api/publish/republish", { siteId: site.id });
+      setPublishNotice({ kind: "ok", text: "Your live website is up to date." });
+    } catch (error) {
+      setPublishNotice({ kind: "error", text: errorMessage(error) });
+    }
+    setPublishing(false);
+  };
+
   // A notice only matters while the draft is still unsaved.
   const visibleNotice = saveState === "saved" ? null : notice;
+  // Once new edits land, "up to date" is no longer true.
+  const visiblePublishNotice = publishNotice?.kind === "ok" && pendingChanges ? null : publishNotice;
 
   const uid = user?.uid ?? "";
 
@@ -177,12 +211,54 @@ function Editor({ site, initial }: { site: Site; initial: SiteContent }) {
         {tab === "settings" ? <SettingsTab site={site} draft={draft} update={update} /> : null}
       </div>
 
-      <StickyFooter>
-        <Button block icon="visibility" iconPosition="left" loading={leaving} onClick={() => void leave(backHref)}>
-          See my website
-        </Button>
-        <FooterNote>Changes save automatically.</FooterNote>
-      </StickyFooter>
+      {live ? (
+        <StickyFooter>
+          {visiblePublishNotice ? (
+            <p
+              role="status"
+              className={cn(
+                "rounded-input px-4 py-3 text-[13px] font-semibold",
+                visiblePublishNotice.kind === "ok" ? "bg-success-tint text-success" : "bg-danger-tint text-danger",
+              )}
+            >
+              {visiblePublishNotice.text}
+            </p>
+          ) : null}
+          <div className="flex gap-[10px]">
+            <ButtonLink
+              href={publicSiteUrl(site.slug as string)}
+              target="_blank"
+              rel="noopener"
+              variant="secondary"
+              icon="open_in_new"
+              iconPosition="left"
+              className="flex-1"
+            >
+              View live
+            </ButtonLink>
+            <Button
+              className="flex-[1.4]"
+              icon="published_with_changes"
+              iconPosition="left"
+              loading={publishing}
+              disabled={!pendingChanges || leaving}
+              onClick={() => void publishChanges()}
+            >
+              Publish changes
+            </Button>
+          </div>
+          <FooterNote>
+            {pendingChanges ? "Edits save automatically. Visitors see them once you publish." : "Everything you see here is live."}
+          </FooterNote>
+        </StickyFooter>
+      ) : (
+        <StickyFooter>
+          <Button block icon="visibility" iconPosition="left" loading={leaving} onClick={() => void leave(backHref)}>
+            See my website
+          </Button>
+          <FooterNote>Changes save automatically.</FooterNote>
+        </StickyFooter>
+      )}
 
       {previewOpen ? <PreviewOverlay site={draft} onClose={() => setPreviewOpen(false)} /> : null}
     </>

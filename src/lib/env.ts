@@ -48,8 +48,17 @@ export const serverEnv = {
   get firebaseServiceAccountBase64(): string | undefined {
     return process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || undefined;
   },
-  get paymentProvider(): "none" | "stripe" {
-    return process.env.PAYMENT_PROVIDER === "stripe" ? "stripe" : "none";
+  /**
+   * none  – payments not configured; Publish shows an honest "not yet" state.
+   * stripe – Stripe Checkout (FPX, cards, e-wallets), verified by webhook or
+   *          by retrieving the session from Stripe on return.
+   * mock  – local development only. Refused in production builds.
+   */
+  get paymentProvider(): "none" | "stripe" | "mock" {
+    const value = process.env.PAYMENT_PROVIDER;
+    if (value === "stripe") return "stripe";
+    if (value === "mock" && process.env.NODE_ENV !== "production") return "mock";
+    return "none";
   },
   get stripeSecretKey(): string | undefined {
     return process.env.STRIPE_SECRET_KEY || undefined;

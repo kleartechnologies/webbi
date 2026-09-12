@@ -6,7 +6,7 @@ import { Button, ButtonLink, Icon, type IconName } from "@/components/ui";
 import { PRICE_LABEL } from "@/lib/env";
 import { formatEdited } from "@/lib/format";
 import { getCategory } from "@/lib/site/categories";
-import { publicSitePath, publicSiteUrl, resumePath, siteHost, siteName } from "@/lib/site/flow";
+import { hasUnpublishedChanges, publicSitePath, publicSiteUrl, resumePath, siteHost, siteName } from "@/lib/site/flow";
 import { PRESETS, presetStyle } from "@/lib/site/presets";
 import { slugify } from "@/lib/site/slug";
 import { deleteDraftSite } from "@/lib/site/store";
@@ -166,7 +166,13 @@ export function SiteCard({ site }: { site: Site }) {
 
         <div className="flex items-center justify-between pt-0.5 text-[12px] text-muted">
           <span>Last edited {formatEdited(site.updatedAt)}</span>
-          <span>{site.paid ? `Paid · ${PRICE_LABEL} · lifetime` : "Free to preview"}</span>
+          {published && hasUnpublishedChanges(site) ? (
+            <Link href={`/s/${site.id}/edit`} className="font-bold text-[#8A5A0E]">
+              Unpublished edits
+            </Link>
+          ) : (
+            <span>{site.paid ? `Paid · ${PRICE_LABEL} · lifetime` : "Free to preview"}</span>
+          )}
         </div>
       </div>
     </article>

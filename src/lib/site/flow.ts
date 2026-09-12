@@ -39,3 +39,25 @@ export function resumePath(site: Site): string {
       return `${base}/confirm`;
   }
 }
+
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stable(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+/** Does a live site have edits its visitors can't see yet? */
+export function hasUnpublishedChanges(site: Site): boolean {
+  if (site.status !== "published" || !site.draft) return false;
+  return stable(site.draft) !== stable(site.published);
+}
+
+/** Checkout return URL. `{CHECKOUT_SESSION_ID}` is filled in by the provider. */
+export function checkoutReturnPath(siteId: string): string {
+  return `/s/${siteId}/publish/return?session_id={CHECKOUT_SESSION_ID}`;
+}

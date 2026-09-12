@@ -32,21 +32,25 @@ export function Input({ className, invalid, leading, ...rest }: InputProps) {
     "h-[52px] w-full rounded-input border-[1.5px] bg-surface px-4 text-[16px] text-ink outline-none transition-[border-color,box-shadow] duration-150",
     "focus:border-navy focus:shadow-focus",
     invalid ? "border-danger" : "border-line-input",
-    Boolean(leading) && "rounded-l-none border-l-0 pl-2",
     className,
   );
   if (!leading) return <input className={inputClasses} aria-invalid={invalid || undefined} {...rest} />;
+  // With a prefix, the wrapper owns the border so the focus ring and the
+  // invalid colour cover the whole control instead of splitting at the prefix.
   return (
-    <div className="flex w-full">
-      <span
-        className={cn(
-          "flex h-[52px] items-center rounded-l-input border-[1.5px] border-r-0 bg-ground pl-4 pr-1 text-[15px] text-muted whitespace-nowrap",
-          invalid ? "border-danger" : "border-line-input",
-        )}
-      >
-        {leading}
-      </span>
-      <input className={inputClasses} aria-invalid={invalid || undefined} {...rest} />
+    <div
+      className={cn(
+        "flex h-[52px] w-full overflow-hidden rounded-input border-[1.5px] bg-surface transition-[border-color,box-shadow] duration-150",
+        "focus-within:border-navy focus-within:shadow-focus",
+        invalid ? "border-danger" : "border-line-input",
+      )}
+    >
+      <span className="flex items-center bg-ground pl-4 pr-1 text-[15px] text-muted whitespace-nowrap">{leading}</span>
+      <input
+        className={cn("h-full w-full min-w-0 bg-transparent pl-2 pr-4 text-[16px] text-ink outline-none", className)}
+        aria-invalid={invalid || undefined}
+        {...rest}
+      />
     </div>
   );
 }

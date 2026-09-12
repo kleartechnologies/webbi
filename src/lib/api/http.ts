@@ -3,13 +3,22 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { UnauthorizedError } from "@/lib/auth/verify";
 import { AiError } from "@/lib/ai/errors";
+import { AdminNotConfiguredError } from "@/lib/firebase/admin";
+import { PaymentError } from "@/lib/payments/provider";
+import { PublishError } from "@/lib/site/publish";
 
 export type ApiErrorCode =
   | "unauthenticated"
+  | "forbidden"
+  | "not_found"
+  | "conflict"
   | "bad_request"
   | "rate_limited"
   | "ai_not_configured"
   | "ai_failed"
+  | "payments_not_configured"
+  | "payment_failed"
+  | "admin_not_configured"
   | "internal";
 
 export function apiError(status: number, code: ApiErrorCode, message: string) {
@@ -26,6 +35,24 @@ export function handleApiError(error: unknown) {
     if (error.code === "ai_not_configured") return apiError(503, "ai_not_configured", error.message);
     if (error.code === "rate_limited") return apiError(429, "rate_limited", error.message);
     return apiError(502, "ai_failed", error.message);
+  }
+  if (error instanceof PublishError) {
+    const status = { not_found: 404, forbidden: 403, conflict: 409, bad_request: 400 }[error.code];
+    return apiError(status, error.code, error.message);
+  }
+  if (error instanceof PaymentError) {
+    if (error.code === "payments_not_configured") return apiError(503, "payments_not_configured", error.message);
+    if (error.code === "not_found") return apiError(404, "not_found", error.message);
+    if (error.code === "bad_signature") return apiError(400, "bad_request", error.message);
+    return apiError(502, "payment_failed", error.message);
+  }
+  if (error instanceof AdminNotConfiguredError) {
+    console.error("[api] admin not configured");
+    return apiError(
+      503,
+      "admin_not_configured",
+      "Publishing isn't switched on for this deployment yet. The server needs its Firebase service account (see README).",
+    );
   }
   console.error("[api] unhandled", error);
   return apiError(500, "internal", "Something went wrong on our side. Please try again.");

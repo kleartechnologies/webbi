@@ -8,7 +8,10 @@ import "server-only";
  *   2. Application Default Credentials – GOOGLE_APPLICATION_CREDENTIALS or the
  *      file written by `gcloud auth application-default login` (local dev).
  *
- * If neither exists the feature that needs Admin fails with
+ * Against the local Firebase Emulator Suite (FIRESTORE_EMULATOR_HOST set,
+ * never in production) no credentials are needed at all.
+ *
+ * If none of these apply the feature that needs Admin fails with
  * AdminNotConfiguredError, which routes turn into an honest 503.
  */
 import { existsSync } from "node:fs";
@@ -40,9 +43,13 @@ function adcPath(): string {
   return join(homedir(), ".config", "gcloud", "application_default_credentials.json");
 }
 
+/** Local emulator: the Admin SDK talks to it without credentials. */
+const EMULATOR = Boolean(process.env.FIRESTORE_EMULATOR_HOST) && process.env.NODE_ENV !== "production";
+
 export function isAdminConfigured(): boolean {
   return Boolean(
-    serverEnv.firebaseServiceAccountBase64 ||
+    EMULATOR ||
+      serverEnv.firebaseServiceAccountBase64 ||
       process.env.GOOGLE_APPLICATION_CREDENTIALS ||
       existsSync(adcPath()),
   );
@@ -55,6 +62,16 @@ export function getAdminApp(): App {
   const existing = getApps();
   if (existing.length) {
     adminApp = existing[0];
+    return adminApp;
+  }
+  if (EMULATOR) {
+    // No credential: the Firestore client talks to the emulator unauthenticated.
+    // (Its one-off probe for Google credentials logs a MetadataLookupWarning and
+    // costs a few seconds on the first request; harmless in local dev.)
+    adminApp = initializeApp({
+      projectId: publicEnv.firebase.projectId,
+      storageBucket: publicEnv.firebase.storageBucket,
+    });
     return adminApp;
   }
   const b64 = serverEnv.firebaseServiceAccountBase64;
@@ -90,8 +107,16 @@ export function adminAuth() {
   return getAuth(getAdminApp());
 }
 
+let dbConfigured = false;
+
 export function adminDb() {
-  return getFirestore(getAdminApp());
+  const db = getFirestore(getAdminApp());
+  if (!dbConfigured) {
+    // Site content has many optional fields; drop `undefined` instead of throwing.
+    db.settings({ ignoreUndefinedProperties: true });
+    dbConfigured = true;
+  }
+  return db;
 }
 
 export function adminStorage() {

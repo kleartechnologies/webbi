@@ -53,13 +53,43 @@ export interface UserDoc {
 
 /**
  * Firestore document at publicSites/{slug}: the live copy of a site. World
- * readable, written only by the server after verified payment.
+ * readable, written only by the server after verified payment. Holds nothing
+ * about the owner beyond the content they chose to publish.
  */
 export interface PublicSiteDoc {
   siteId: string;
-  ownerUid: string;
   slug: string;
   content: SiteContent;
   publishedAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+/** Firestore document at slugs/{slug}: who owns a link. Server only. */
+export interface SlugDoc {
+  siteId: string;
+  ownerUid: string;
+  createdAt: Timestamp;
+}
+
+export type PaymentStatus = "pending" | "paid" | "failed";
+
+/**
+ * Firestore document at payments/{paymentId}. Created by the server when a
+ * checkout starts; marked paid only after the provider confirms it.
+ */
+export interface PaymentDoc {
+  siteId: string;
+  ownerUid: string;
+  /** Link requested at checkout. The final slug is on the site document. */
+  slug: string;
+  amountSen: number;
+  currency: "myr";
+  provider: "stripe" | "mock";
+  /** Provider's checkout/session id. */
+  providerRef: string | null;
+  status: PaymentStatus;
+  failureReason: string | null;
+  createdAt: Timestamp;
+  paidAt: Timestamp | null;
   updatedAt: Timestamp;
 }
