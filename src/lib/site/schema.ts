@@ -210,6 +210,8 @@ export const themeSchema = z.object({
     .string()
     .regex(/^#[0-9a-fA-F]{6}$/)
     .optional(),
+  /** Footer "Built with Webbi" credit. Omitted = shown. */
+  showCredit: z.boolean().optional(),
 });
 export type Theme = z.infer<typeof themeSchema>;
 

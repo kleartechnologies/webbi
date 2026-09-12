@@ -84,8 +84,9 @@ function Generating({ site }: { site: Site }) {
           input: generation.input,
         });
         await updateSite(site.id, { draft, generation: { ...generation, status: "ready", model, error: undefined } });
+        // The snapshot effect above redirects once the doc reads status "ready";
+        // a separate timer here could fire after the user has already moved on.
         setStep(5);
-        setTimeout(() => router.replace(`/s/${site.id}/ready`), 700);
       } catch (err) {
         const message = errorMessage(err);
         setError(message);
