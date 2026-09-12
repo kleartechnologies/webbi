@@ -50,3 +50,6 @@ ui-debug.log
 .firebase/
 .netlify/
 
+
+# QA screenshots
+scripts/qa/shots/
