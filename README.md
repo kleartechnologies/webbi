@@ -131,6 +131,17 @@ QA_BASE_URL=http://localhost:3000 npm run qa:publish
 
 `scripts/qa/publish-flow.mjs` drives a phone-sized headless Chrome through onboarding, guest → account, slug validation, mock payment, the live page, the public `/w/{slug}` page as a signed-out visitor, "Publish changes" from the editor, the dashboard, slug collisions, cancelled checkouts and bogus return sessions, and checks the resulting Firestore documents. Screenshots land in `scripts/qa/shots/`. Set `QA_CHROME` if Chrome isn't at the default macOS path.
 
+### Testing the real AI provider locally
+
+`netlify dev` / `netlify serve` do **not** hand the functions your `OPENAI_API_KEY`: the CLI replaces `OPENAI_API_KEY` and `OPENAI_BASE_URL` with a Netlify AI Gateway token and URL (usage is billed to Netlify credits, not your OpenAI account). That token is bound to the IPv4 address the CLI used, and Node prefers IPv6, so calls fail with `403 mismatched_client_ip` unless you start the runner with IPv4 first:
+
+```bash
+NODE_OPTIONS=--dns-result-order=ipv4first npx netlify serve -p 3108 --context production
+QA_BASE_URL=http://localhost:3108 npm run qa:industries
+```
+
+That exercises the real model through the real adapter, but not your own key. To test your key itself, put it in `.env.local` (git-ignored) and use the plain dev server with `AI_PROVIDER=openai`, or test the production deploy — Netlify never overrides a key you set yourself.
+
 ## Deploying rules and indexes
 
 ```bash
@@ -152,7 +163,7 @@ Environment variables to set under Site configuration → Environment variables 
 ### Before launch
 
 1. Firebase Console → Authentication → Sign-in method: enable **Anonymous**, **Google**, **Email/Password**; Settings → Authorized domains: add the Netlify domain (and the custom domain later).
-2. Firebase Console → Project settings → Service accounts → generate a key → `FIREBASE_SERVICE_ACCOUNT_BASE64` on Netlify. Without it every `/api/*` route fails with a clear "server not configured" error.
+2. Firebase Console → Project settings → Service accounts → generate a key → `FIREBASE_SERVICE_ACCOUNT_BASE64` on Netlify (set as a **secret**, which Netlify only allows for the production / deploy-preview / branch-deploy contexts). Already set. Without it every `/api/*` route fails with a clear "server not configured" error.
 3. `OPENAI_API_KEY` on Netlify (`AI_PROVIDER` unset or `openai`). Already set.
 4. Payments: the planned Malaysian provider is Billplz (not integrated yet). Until a real provider is wired in, `PAYMENT_PROVIDER` stays `none` in production and the Publish screen honestly says payments aren't on yet. `mock` is refused in production builds.
 5. `firebase deploy --only firestore:rules,firestore:indexes,storage --project webbi-85f26` (already deployed once; re-run after changing rules).
