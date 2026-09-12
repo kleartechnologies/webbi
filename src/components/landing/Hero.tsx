@@ -1,59 +1,48 @@
-import { ButtonLink, Icon } from "@/components/ui";
+import { Icon } from "@/components/ui";
+import { PRICE_LABEL } from "@/lib/env";
+import { CreateCta, GhostCta } from "./Cta";
 import { HeroPhone } from "./HeroPhone";
 
-const HERO_PROMPT =
-  "Saya buka kedai makan di Kajang, jual nasi lemak dan lauk kampung. Customer biasa order ikut WhatsApp.";
-
-const CHECKS = ["RM149.90, one time", "Live in minutes", "WhatsApp-ready"];
+const CHECKS = [`${PRICE_LABEL}, one time`, "No subscription", "WhatsApp-ready"];
 
 export function Hero() {
   return (
-    <section
-      id="top"
-      className="mx-auto grid w-full max-w-webbi grid-cols-1 items-center gap-10 px-5 pt-12 pb-10 sm:px-6 sm:pt-14 lg:grid-cols-[minmax(0,1fr)_auto]"
-    >
-      <div className="flex max-w-[560px] flex-col gap-[22px]">
-        <span className="inline-flex h-8 items-center gap-2 self-start rounded-pill border border-line bg-surface pr-3 pl-2 text-[13px] font-semibold text-muted">
-          <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full bg-amber text-ink">
-            <Icon name="auto_awesome" size={12} fill />
-          </span>
-          Websites for Malaysian small businesses
-        </span>
-        <h1 className="text-[clamp(40px,6vw,64px)] leading-[1.02] tracking-[-0.035em] text-pretty">
-          Tell us what you do. We&apos;ll build your website.
-        </h1>
-        <p className="text-[19px] leading-[1.5] text-muted text-pretty">
-          Professional websites for businesses, creators and salespeople, without the hassle.
-        </p>
-        <div className="flex flex-wrap gap-[10px]">
-          <ButtonLink href="/start" icon="arrow_forward" className="h-14 px-[26px] text-[17px]">
-            Create My Website
-          </ButtonLink>
-          <ButtonLink href="#examples" variant="secondary" className="h-14 px-6 text-[17px]">
-            See Examples
-          </ButtonLink>
-        </div>
-        <div className="flex flex-wrap gap-x-[18px] gap-y-2 text-[14px] text-muted">
-          {CHECKS.map((c) => (
-            <span key={c} className="flex items-center gap-1.5">
-              <Icon name="check_circle" size={18} fill className="text-success" />
-              {c}
-            </span>
-          ))}
-        </div>
-      </div>
+    <section id="top" className="relative -mt-[72px] overflow-hidden bg-blue px-4 pt-[112px] pb-14 text-white">
+      <div aria-hidden className="absolute -top-[140px] -right-[120px] h-[460px] w-[460px] rounded-full bg-blue-light" />
+      <div aria-hidden className="absolute -bottom-[180px] -left-[140px] h-[420px] w-[420px] rounded-full bg-blue-deep" />
 
-      <div className="flex flex-col items-center gap-[14px] justify-self-center">
-        <div className="flex w-full max-w-[330px] flex-col gap-[10px] rounded-[20px] border border-line bg-surface px-[18px] py-4 shadow-[0_10px_30px_rgba(20,26,59,.08)]">
-          <span className="text-[12px] font-bold uppercase tracking-[0.06em] text-muted">What do you do?</span>
-          <p className="text-[16px] leading-[1.5] text-ink">“{HERO_PROMPT}”</p>
-          <div className="flex items-center gap-2 text-[13px] font-bold text-navy">
-            <Icon name="auto_awesome" size={18} fill className="text-amber" />
-            Webbi built this in under a minute
-            <Icon name="arrow_downward" size={18} className="ml-auto" />
+      <div className="relative mx-auto grid w-full max-w-[1180px] grid-cols-[repeat(auto-fit,minmax(300px,1fr))] items-center gap-[clamp(28px,4vw,56px)]">
+        <div className="flex max-w-[600px] flex-col items-start gap-[22px]">
+          <span className="inline-flex h-[34px] items-center gap-[7px] rounded-pill bg-white/14 px-[14px] text-[13px] font-semibold">
+            <Icon name="auto_awesome" size={17} className="text-sun" />
+            AI websites for Malaysian businesses
+          </span>
+          <h1 className="font-display text-[clamp(42px,7.2vw,86px)] font-extrabold leading-[0.96] tracking-[-0.045em] text-sun">
+            Tell us what you do.
+            <br />
+            <span className="text-white">We&apos;ll build your website.</span>
+          </h1>
+          <p className="max-w-[34ch] text-[clamp(17px,2vw,21px)] leading-[1.45] text-white/88">
+            Professional websites for businesses, creators and salespeople — without the hassle.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <CreateCta />
+            <GhostCta href="#how">See How It Works</GhostCta>
           </div>
+          <ul className="flex flex-wrap gap-x-5 gap-y-2 text-[14px] text-white/82">
+            {CHECKS.map((c) => (
+              <li key={c} className="flex items-center gap-2">
+                <Icon name="check_circle" size={18} fill className="text-sun" />
+                {c}
+              </li>
+            ))}
+          </ul>
         </div>
-        <HeroPhone />
+
+        <div className="lp-reveal flex flex-col items-center gap-[18px] justify-self-center pt-6 pb-4" style={{ "--lp-delay": "120ms", "--lp-rise": "26px" } as React.CSSProperties}>
+          <HeroPhone />
+          <p className="text-center font-mono text-[11px] leading-[1.4] text-white/70">Example Webbi · Rasa Kampung, built from one description</p>
+        </div>
       </div>
     </section>
   );

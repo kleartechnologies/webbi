@@ -33,6 +33,14 @@
   --color-danger: #b4472b;
   --color-danger-tint: #fbeae5;
 
+  /* Marketing landing only (Webbi Landing v2 handoff): never used by the app or site renderer. */
+  --color-blue: #2536cf;
+  --color-blue-light: #2e40e8;
+  --color-blue-deep: #1e2cb4;
+  --color-sun: #f7cb5c;
+  --color-lavender: #dfdcf8;
+  --color-forest: #0e4a2e;
+
   /* Type scale: size / line-height / letter-spacing */
   --text-display: 44px;
   --text-display--line-height: 1.05;
@@ -159,4 +167,50 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .fade-up, .fade-in { animation: none; }
+}
+
+/*
+  Marketing landing (src/components/landing). Scroll-in reveals, the idle
+  floats and the embedded example-site rules from the Landing v2 handoff.
+*/
+@keyframes wb-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -14px, 0); }
+}
+@keyframes wb-float-slow {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, 10px, 0); }
+}
+@keyframes wb-blink {
+  0%, 45% { opacity: 1; }
+  50%, 95% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+[data-landing] { overflow-x: clip; }
+[data-landing] ::selection { background: #f7cb5c; color: #141a3b; }
+html:has([data-landing]) { scroll-behavior: smooth; }
+
+/* Hidden until LandingMotion marks it in view (JS failsafe after 3s; <noscript> shows all). */
+.lp-reveal {
+  opacity: 0;
+  transform: translateY(var(--lp-rise, 18px));
+  transition: opacity 0.7s ease var(--lp-delay, 0ms), transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) var(--lp-delay, 0ms);
+}
+.lp-reveal.is-in { opacity: 1; transform: translateY(0); }
+.lp-float { animation: wb-float 7s ease-in-out infinite; }
+.lp-float-slow { animation: wb-float-slow 8s ease-in-out infinite; }
+.lp-float-9 { animation: wb-float 9s ease-in-out infinite; }
+.lp-blink { animation: wb-blink 1.1s steps(1) infinite; }
+.lp-rail { scrollbar-width: none; }
+.lp-rail::-webkit-scrollbar { display: none; }
+
+/* Embedded example sites are clipped, not scrolled: park their sticky header. */
+[data-site-preview] { pointer-events: none; user-select: none; }
+[data-site-preview] .sticky { position: static !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-reveal { opacity: 1; transform: none; transition: none; }
+  .lp-float, .lp-float-slow, .lp-float-9, .lp-blink { animation: none; }
+  html:has([data-landing]) { scroll-behavior: auto; }
 }

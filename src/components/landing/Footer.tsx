@@ -1,25 +1,30 @@
+import Link from "next/link";
 import { Wordmark } from "@/components/ui";
+import { NavAuthLink } from "./NavAuthLink";
 
-export function LandingFooter() {
+const LINK = "transition-colors hover:text-white";
+
+export function LandingFooter({ landing = false }: { landing?: boolean }) {
   const supportWhatsApp = process.env.NEXT_PUBLIC_SUPPORT_WHATSAPP;
+  const anchor = (id: string) => (landing ? `#${id}` : `/#${id}`);
   return (
-    <footer className="border-t border-line">
-      <div className="mx-auto flex w-full max-w-webbi flex-wrap items-center justify-between gap-4 px-5 pt-7 pb-10 text-[13px] text-muted sm:px-6">
-        <div className="flex items-center gap-2">
-          <Wordmark size={20} />
-          <span className="ml-1">Real businesses. Real websites.</span>
-        </div>
-        <div className="flex flex-wrap gap-[18px]">
-          <a href="#examples" className="hover:text-ink">Examples</a>
-          <a href="#pricing" className="hover:text-ink">Pricing</a>
-          <a href="#faq" className="hover:text-ink">FAQ</a>
+    <footer className="relative z-10 bg-ink px-4 pt-9 pb-11 text-white/70">
+      <div className="mx-auto flex w-full max-w-[1180px] flex-wrap items-center justify-between gap-5">
+        <Wordmark href={landing ? "#top" : "/"} size={24} className="text-white!" />
+        <nav aria-label="Footer" className="flex flex-wrap items-center gap-x-[22px] gap-y-2 text-[14px] font-semibold">
+          <a href={anchor("how")} className={LINK}>How it works</a>
+          <a href={anchor("examples")} className={LINK}>Examples</a>
+          <a href={anchor("pricing")} className={LINK}>Pricing</a>
+          <Link href="/terms" className={LINK}>Terms</Link>
+          <Link href="/privacy" className={LINK}>Privacy</Link>
           {supportWhatsApp ? (
-            <a href={`https://wa.me/${supportWhatsApp.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" className="hover:text-ink">
+            <a href={`https://wa.me/${supportWhatsApp.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" className={LINK}>
               WhatsApp support
             </a>
           ) : null}
-        </div>
-        <span>© {new Date().getFullYear()} Webbi</span>
+          <NavAuthLink className={LINK} />
+        </nav>
+        <span className="text-[13px]">© {new Date().getFullYear()} Webbi · Built in Malaysia</span>
       </div>
     </footer>
   );
