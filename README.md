@@ -142,6 +142,8 @@ QA_BASE_URL=http://localhost:3108 npm run qa:industries
 
 That exercises the real model through the real adapter, but not your own key. To test your key itself, put it in `.env.local` (git-ignored) and use the plain dev server with `AI_PROVIDER=openai`, or test the production deploy — Netlify never overrides a key you set yourself.
 
+Each `qa:industries` / `qa:publish` run against the real project leaves anonymous Auth users and their draft `sites` docs behind. `npm run qa:cleanup` lists them (dry run; needs `gcloud auth login`), and `npm run qa:cleanup -- --apply` deletes them. It only removes users with no sign-in provider or email, their draft sites, and orphaned `users` docs.
+
 ## Deploying rules and indexes
 
 ```bash
