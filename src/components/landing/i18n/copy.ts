@@ -19,9 +19,6 @@ export type LandingLang = "en" | "ms";
 type ShowcaseCategory = Extract<CategoryId, "restaurant" | "car" | "tutor" | "beauty" | "homeServices" | "photographer" | "retail" | "professional">;
 
 const en = {
-  meta: {
-    title: "Webbi – Websites for Malaysian small businesses",
-  },
   language: {
     group: "Language",
     en: "English (EN)",
@@ -194,9 +191,6 @@ const en = {
 export type LandingCopy = typeof en;
 
 const ms: LandingCopy = {
-  meta: {
-    title: "Webbi – Website untuk bisnes kecil di Malaysia",
-  },
   language: {
     group: "Bahasa",
     en: "English (EN)",

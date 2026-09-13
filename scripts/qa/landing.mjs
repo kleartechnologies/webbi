@@ -315,6 +315,91 @@ await step("N  switching back to EN restores every word", async () => {
   await desktop.waitForFunction(() => document.documentElement.lang === "en" && document.title.includes("Malaysian"), { timeout: 5000 });
 });
 
+const ORIGIN = "https://webbi.online";
+const TITLE = "Webbi — Websites for Malaysian Businesses";
+/** The search and sharing tags as the browser holds them right now. */
+const head = (page) =>
+  page.evaluate(() => {
+    const all = (sel, attr) => [...document.querySelectorAll(sel)].map((el) => el.getAttribute(attr));
+    return {
+      title: document.title,
+      lang: document.documentElement.lang,
+      titles: document.querySelectorAll("title").length,
+      canonical: all('link[rel="canonical"]', "href"),
+      description: all('meta[name="description"]', "content"),
+      robots: all('meta[name="robots"], meta[name="googlebot"]', "content"),
+      og: Object.fromEntries([...document.querySelectorAll('meta[property^="og:"], meta[name^="twitter:"]')].map((m) => [m.getAttribute("property") || m.name, m.content])),
+      ld: [...document.querySelectorAll('script[type="application/ld+json"]')].map((s) => s.textContent),
+    };
+  });
+
+await step("Q  search metadata: title, canonical, no noindex, social tags, structured data, stable across EN | BM", async () => {
+  const res = await fetch(`${base}/`);
+  const html = await res.text();
+  expect(res.status === 200, `/ answered ${res.status}`);
+  expect(!/noindex/i.test(html) && !/noindex/i.test(res.headers.get("x-robots-tag") ?? ""), "the landing is marked noindex");
+  expect(!/netlify\.app/.test(html), "the landing HTML still mentions netlify.app");
+  expect(/<html[^>]*\blang="en"/.test(html), "the server HTML is not lang=en");
+
+  const en = await head(desktop);
+  expect(en.title === TITLE && en.titles === 1, `title: ${en.title} (${en.titles} <title>)`);
+  expect(JSON.stringify(en.canonical) === JSON.stringify([ORIGIN]), `canonical: ${en.canonical}`);
+  expect(en.description.length === 1 && en.description[0].includes("Malaysian businesses"), `description: ${en.description}`);
+  expect(en.robots.every((r) => !/noindex/i.test(r)), `robots meta: ${en.robots}`);
+  for (const key of ["og:title", "og:description", "og:url", "og:image", "og:type", "og:site_name", "twitter:card", "twitter:title", "twitter:image"]) {
+    expect(en.og[key], `missing ${key}`);
+  }
+  expect(en.og["og:url"] === ORIGIN && en.og["og:image"].startsWith(`${ORIGIN}/`), `og: ${en.og["og:url"]} ${en.og["og:image"]}`);
+  expect(en.ld.length === 1, `${en.ld.length} JSON-LD blocks`);
+  const types = JSON.parse(en.ld[0])["@graph"].map((n) => n["@type"]);
+  expect(JSON.stringify(types) === '["Organization","WebSite"]', `structured data: ${types}`);
+
+  await desktop.click('[data-language-toggle] button[lang="ms"]');
+  await desktop.waitForFunction(() => document.documentElement.lang === "ms", { timeout: 5000 });
+  const ms = await head(desktop);
+  expect(ms.title.includes("bisnes kecil") && ms.titles === 1, `BM title: ${ms.title} (${ms.titles} <title>)`);
+  expect(JSON.stringify({ ...ms, title: 0, lang: 0 }) === JSON.stringify({ ...en, title: 0, lang: 0 }), "switching to BM changed or duplicated the search tags");
+  await desktop.click('[data-language-toggle] button[lang="en"]');
+  await desktop.waitForFunction((t) => document.documentElement.lang === "en" && document.title === t, { timeout: 5000 }, TITLE);
+});
+
+await step("R  robots.txt, sitemap.xml, favicon and share image resolve on webbi.online URLs", async () => {
+  const robots = await fetch(`${base}/robots.txt`);
+  const robotsText = await robots.text();
+  expect(robots.status === 200, `/robots.txt answered ${robots.status}`);
+  expect(/User-Agent: \*/i.test(robotsText) && /^Allow: \/$/m.test(robotsText) && !/^Disallow: \/$/m.test(robotsText), `robots.txt:\n${robotsText}`);
+  expect(robotsText.includes(`Sitemap: ${ORIGIN}/sitemap.xml`), `robots.txt sitemap line:\n${robotsText}`);
+
+  const map = await fetch(`${base}/sitemap.xml`);
+  const xml = await map.text();
+  expect(map.status === 200 && /xml/.test(map.headers.get("content-type") ?? ""), `/sitemap.xml answered ${map.status} ${map.headers.get("content-type")}`);
+  const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+  expect(JSON.stringify(locs) === JSON.stringify([ORIGIN, `${ORIGIN}/privacy`, `${ORIGIN}/terms`]), `sitemap: ${locs}`);
+
+  const { canonical, og } = await head(desktop);
+  const urls = [...locs, ...canonical, og["og:image"], `${ORIGIN}/favicon.ico`, `${ORIGIN}/icon.png`, `${ORIGIN}/apple-icon.png`];
+  for (const url of urls) {
+    // Same paths on the server under test: the build is what webbi.online serves.
+    const local = await fetch(url.replace(ORIGIN, base));
+    expect(local.status === 200, `${url} answered ${local.status} locally`);
+  }
+  for (const page of ["/privacy", "/terms"]) {
+    const legal = await (await fetch(`${base}${page}`)).text();
+    expect(legal.includes(`<link rel="canonical" href="${ORIGIN}${page}"/>`) && !/noindex/i.test(legal), `${page} canonical or robots`);
+  }
+});
+
+await step("S  the landing's own headings: one h1, then h2 sections, no skipped levels", async () => {
+  const levels = await desktop.evaluate(() =>
+    [...document.querySelectorAll("[data-landing] :is(h1,h2,h3,h4,h5,h6)")]
+      .filter((h) => !h.closest("[data-site-preview]"))
+      .map((h) => Number(h.tagName[1])),
+  );
+  expect(levels[0] === 1 && levels.filter((l) => l === 1).length === 1, `h1s: ${levels.join(",")}`);
+  const skip = levels.findIndex((l, i) => i > 0 && l > levels[i - 1] + 1);
+  expect(skip === -1, `heading level jumps at #${skip}: ${levels.join(",")}`);
+});
+
 for (const [name, viewport] of [["1440", DESKTOP], ["768", TABLET], ["390", MOBILE]]) {
   await step(`O  BM at ${name}px: no sideways scroll, no clipped buttons, no crowded nav`, async () => {
     const page = await browser.newPage();

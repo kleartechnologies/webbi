@@ -23,7 +23,8 @@
  * because a document keeps the policy it was loaded with. So scripts are
  * limited by origin instead (never a wildcard, never 'unsafe-eval' in
  * production). Injection itself is prevented where it would start: no
- * dangerouslySetInnerHTML, customer content is schema-validated structured
+ * dangerouslySetInnerHTML (the one exception is the landing's JSON-LD, a fixed
+ * object from src/lib/seo.ts), customer content is schema-validated structured
  * data rendered as escaped text, and links go through the URL helpers in
  * src/lib/site/links.ts.
  *

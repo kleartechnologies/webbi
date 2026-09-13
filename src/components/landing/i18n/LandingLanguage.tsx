@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { LANDING_TITLE } from "@/lib/seo";
 import { LANDING_COPY, type LandingCopy, type LandingLang } from "./copy";
 
 /**
@@ -59,7 +60,8 @@ export function LandingLanguage({ children }: { children: ReactNode }) {
     const root = document.documentElement;
     const previousLang = root.lang;
     const previousTitle = document.title;
-    const title = LANDING_COPY[lang].meta.title;
+    // English is the server-rendered SEO title, so only BM visibly changes the tab.
+    const title = LANDING_TITLE[lang];
     root.lang = lang;
     document.title = title;
     return () => {

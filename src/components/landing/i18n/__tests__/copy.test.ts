@@ -57,8 +57,5 @@ describe("landing copy", () => {
     }
   });
 
-  it("gives the Malay page its own title and language names", () => {
-    expect(LANDING_COPY.ms.meta.title).not.toBe(LANDING_COPY.en.meta.title);
-    expect(LANDING_COPY.ms.meta.title.startsWith("Webbi")).toBe(true);
-  });
+  // The tab titles live in src/lib/seo.ts with the rest of the search metadata; seo.test.ts checks them.
 });
