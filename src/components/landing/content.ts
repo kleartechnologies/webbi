@@ -1,9 +1,6 @@
 import type { CSSProperties } from "react";
 import { publicEnv } from "@/lib/env";
 
-/** The description the hero and the magic-moment panel type out. */
-export const PROMPT = "I run a nasi lemak shop in Kajang. Customers usually order through WhatsApp.";
-
 /** Host shown in the mock browser chrome (webbi.online in production). */
 export const HOST = publicEnv.siteUrl.replace(/^https?:\/\//, "");
 

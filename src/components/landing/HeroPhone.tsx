@@ -1,8 +1,11 @@
+"use client";
+
 import { SiteRenderer } from "@/components/site/SiteRenderer";
 import { Icon } from "@/components/ui";
 import { PRICE_LABEL } from "@/lib/env";
 import { DEMO_SITES } from "@/lib/site/demo";
 import { HeroPrompt } from "./HeroPrompt";
+import { useLandingCopy } from "./i18n/LandingLanguage";
 
 /** iPhone-sized viewport the example site is laid out at, scaled into a 276×600 frame. */
 const INNER = { width: 402, height: 874, scale: 0.687 };
@@ -13,6 +16,7 @@ const INNER = { width: 402, height: 874, scale: 0.687 };
  * around it. Marketing preview and product are the same code.
  */
 export function HeroPhone() {
+  const { hero } = useLandingCopy();
   return (
     <div className="relative w-[276px]">
       <div data-float="0.10" className="relative [transform:rotate(-4deg)_translateY(var(--py,0px))]">
@@ -39,13 +43,13 @@ export function HeroPhone() {
           <HeroPrompt />
         </div>
 
-        <div className="lp-float-slow absolute -right-[26px] bottom-[118px] flex items-center gap-2 rounded-[16px] bg-whatsapp px-[14px] py-[10px] text-[12px] font-bold text-white shadow-[0_18px_40px_rgba(8,12,40,.28)]">
+        <div className="lp-float-slow absolute -right-[26px] bottom-[118px] flex items-center gap-2 rounded-[16px] whitespace-nowrap bg-whatsapp px-[14px] py-[10px] text-[12px] font-bold text-white shadow-[0_18px_40px_rgba(8,12,40,.28)]">
           <Icon name="chat" size={18} fill />
-          Order on WhatsApp
+          {hero.whatsappChip}
         </div>
 
-        <div className="lp-float-9 absolute top-9 -right-[18px] rounded-[14px] bg-sun px-3 py-2 text-[12px] font-extrabold text-ink shadow-[0_14px_30px_rgba(8,12,40,.25)]">
-          {PRICE_LABEL} · one time
+        <div className="lp-float-9 absolute top-9 -right-[18px] rounded-[14px] bg-sun px-3 py-2 text-[12px] font-extrabold whitespace-nowrap text-ink shadow-[0_14px_30px_rgba(8,12,40,.25)]">
+          {hero.priceChip(PRICE_LABEL)}
         </div>
       </div>
     </div>

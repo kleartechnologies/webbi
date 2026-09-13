@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icon } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { useLandingCopy } from "../i18n/LandingLanguage";
 
 /**
  * The showcase list: a 3×3 grid from lg up, and below that a swipeable rail
@@ -10,6 +11,7 @@ import { cn } from "@/lib/cn";
  * time at a size worth looking at.
  */
 export function ShowcaseScroller({ count, children }: { count: number; children: ReactNode }) {
+  const { showcase } = useLandingCopy();
   const rail = useRef<HTMLUListElement>(null);
   const [index, setIndex] = useState(0);
 
@@ -51,7 +53,7 @@ export function ShowcaseScroller({ count, children }: { count: number; children:
       <ul
         ref={rail}
         tabIndex={0}
-        aria-label="Example websites for nine kinds of business"
+        aria-label={showcase.rail}
         className="lp-rail flex snap-x snap-mandatory gap-4 overflow-x-auto scroll-px-4 px-[max(16px,calc((100%-1180px)/2))] pt-1 pb-3 sm:gap-6 lg:mx-auto lg:grid lg:w-full lg:max-w-[1180px] lg:grid-cols-3 lg:gap-x-8 lg:gap-y-14 lg:overflow-visible lg:px-4 lg:pb-0"
       >
         {children}
@@ -61,10 +63,10 @@ export function ShowcaseScroller({ count, children }: { count: number; children:
           {index + 1} / {count}
         </p>
         <div className="flex gap-2">
-          <button type="button" className={arrow} onClick={() => go(-1)} disabled={index === 0} aria-label="Previous business">
+          <button type="button" className={arrow} onClick={() => go(-1)} disabled={index === 0} aria-label={showcase.previous}>
             <Icon name="arrow_back" size={20} />
           </button>
-          <button type="button" className={cn(arrow)} onClick={() => go(1)} disabled={index === count - 1} aria-label="Next business">
+          <button type="button" className={cn(arrow)} onClick={() => go(1)} disabled={index === count - 1} aria-label={showcase.next}>
             <Icon name="arrow_forward" size={20} />
           </button>
         </div>

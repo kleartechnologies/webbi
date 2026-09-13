@@ -7,8 +7,6 @@ export interface ShowcaseBusiness {
   /** Address shown in the mock browser; a live example when it is one of DEMO_SITES. */
   slug: string;
   name: string;
-  /** What and where, as the card heading shows it. */
-  sub: string;
   template: PresetId;
   /** Picks the button label and icons, the same way a real site gets them. */
   category: CategoryId;
@@ -32,13 +30,14 @@ interface Feature {
 /**
  * Nine kinds of business, each shown the way its Webbi would look. Rasa Kampung,
  * Hafiz Rahman, Sereni and SejukTech are the shipped example sites (their
- * headlines match); the rest illustrate other categories.
+ * headlines match); the rest illustrate other categories. Everything here is
+ * the example site's own content, so it stays put when the landing switches
+ * language; the card subtitles and button captions live in i18n/copy.ts.
  */
 export const BUSINESSES: ShowcaseBusiness[] = [
   {
     slug: "rasa-kampung",
     name: "Rasa Kampung",
-    sub: "Nasi Lemak · Kajang",
     template: "warm",
     category: "restaurant",
     nav: ["Menu", "Waktu", "Lokasi", "Hubungi"],
@@ -56,7 +55,6 @@ export const BUSINESSES: ShowcaseBusiness[] = [
   {
     slug: "hafiz-rahman",
     name: "Hafiz Rahman",
-    sub: "Proton Advisor · Shah Alam",
     template: "bold",
     category: "car",
     nav: ["Models", "Promotions", "Trade-in", "Contact"],
@@ -74,7 +72,6 @@ export const BUSINESSES: ShowcaseBusiness[] = [
   {
     slug: "cikgu-amir",
     name: "Cikgu Amir",
-    sub: "Maths Tuition · Ipoh",
     template: "bright",
     category: "tutor",
     nav: ["Classes", "Results", "Reviews", "Contact"],
@@ -93,7 +90,6 @@ export const BUSINESSES: ShowcaseBusiness[] = [
   {
     slug: "sereni",
     name: "Sereni",
-    sub: "Beauty Studio · Bangsar",
     template: "elegant",
     category: "beauty",
     nav: ["Treatments", "Prices", "Reviews", "Visit"],
@@ -111,7 +107,6 @@ export const BUSINESSES: ShowcaseBusiness[] = [
   {
     slug: "sejuktech",
     name: "SejukTech",
-    sub: "Aircond Service · Klang Valley",
     template: "trust",
     category: "homeServices",
     nav: ["Services", "Prices", "Areas", "Contact"],
@@ -129,7 +124,6 @@ export const BUSINESSES: ShowcaseBusiness[] = [
   {
     slug: "studio-dua",
     name: "Studio Dua",
-    sub: "Wedding Photography · KL",
     template: "elegant",
     category: "photographer",
     nav: ["Packages", "Portfolio", "About", "Contact"],
@@ -147,7 +141,6 @@ export const BUSINESSES: ShowcaseBusiness[] = [
   {
     slug: "teh-tarik",
     name: "Teh Tarik",
-    sub: "Minuman · Kajang",
     template: "warm",
     category: "restaurant",
     nav: ["Menu", "Lokasi", "Waktu", "Hubungi"],
@@ -165,7 +158,6 @@ export const BUSINESSES: ShowcaseBusiness[] = [
   {
     slug: "kedai-rina",
     name: "Kedai Rina",
-    sub: "Online Boutique · Melaka",
     template: "bright",
     category: "retail",
     nav: ["Produk", "Koleksi", "Ulasan", "Hubungi"],
@@ -184,7 +176,6 @@ export const BUSINESSES: ShowcaseBusiness[] = [
   {
     slug: "lim-and-co",
     name: "Lim & Co.",
-    sub: "Accounting · Johor Bahru",
     template: "trust",
     category: "professional",
     nav: ["Services", "About", "Resources", "Contact"],
