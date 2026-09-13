@@ -1,39 +1,51 @@
-import { deleteObject, getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
-import { getClientStorage } from "@/lib/firebase/client";
-import { newId, type SiteImage } from "@/lib/site/schema";
+import { ApiError } from "@/lib/api/client";
+import { getClientAuth } from "@/lib/firebase/client";
+import type { SiteImage } from "@/lib/site/schema";
+import { isUploadType, MAX_UPLOAD_BYTES, TOO_LARGE_MESSAGE, UNSUPPORTED_MESSAGE } from "./limits";
 import { optimizeImage } from "./resize";
 
-/** Uploads one optimised photo to users/{uid}/sites/{siteId}/ and returns a Site image. */
+/**
+ * Resizes a photo in the browser, then sends it to POST /api/sites/images,
+ * which checks it and stores it in the website's folder. The checks here only
+ * give a quick message; the server repeats them on the bytes it receives.
+ *
+ * There is no browser delete: files a website stops using are cleared by the
+ * server (src/lib/images/storage.ts), after the saved website no longer
+ * points at them.
+ */
 export async function uploadSiteImage(
-  uid: string,
   siteId: string,
   file: File,
   onProgress?: (fraction: number) => void,
 ): Promise<SiteImage> {
+  if (!isUploadType(file.type)) throw new Error(UNSUPPORTED_MESSAGE);
   const optimized = await optimizeImage(file);
-  const path = `users/${uid}/sites/${siteId}/${newId("img")}.${optimized.extension}`;
-  const storageRef = ref(getClientStorage(), path);
-  const task = uploadBytesResumable(storageRef, optimized.blob, {
-    contentType: optimized.contentType,
-    cacheControl: "public, max-age=31536000, immutable",
-  });
-  await new Promise<void>((resolve, reject) => {
-    task.on(
-      "state_changed",
-      (snap) => onProgress?.(snap.totalBytes ? snap.bytesTransferred / snap.totalBytes : 0),
-      reject,
-      () => resolve(),
-    );
-  });
-  const url = await getDownloadURL(storageRef);
-  return { url, path, width: optimized.width, height: optimized.height };
-}
+  if (optimized.blob.size > MAX_UPLOAD_BYTES) throw new Error(TOO_LARGE_MESSAGE);
+  const user = getClientAuth().currentUser;
+  if (!user) throw new ApiError("unauthenticated", "Sign in to continue.", 401);
+  const token = await user.getIdToken();
 
-export async function deleteSiteImage(image: SiteImage): Promise<void> {
-  if (!image.path) return;
-  try {
-    await deleteObject(ref(getClientStorage(), image.path));
-  } catch (error) {
-    console.warn("delete image failed", error);
-  }
+  // XMLHttpRequest rather than fetch: it reports upload progress for the progress bar.
+  return new Promise<SiteImage>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/sites/images?siteId=${encodeURIComponent(siteId)}`);
+    xhr.setRequestHeader("authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("content-type", optimized.contentType);
+    xhr.upload.onprogress = (event) => onProgress?.(event.lengthComputable && event.total ? event.loaded / event.total : 0);
+    xhr.onerror = () => reject(new ApiError("network", "No connection. Check your internet and try again.", 0));
+    xhr.onload = () => {
+      let data: Partial<SiteImage> & { error?: { code?: string; message?: string } } = {};
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        // Not JSON (a proxy error page): fall through to the generic message.
+      }
+      if (xhr.status >= 200 && xhr.status < 300 && typeof data.url === "string") {
+        resolve({ url: data.url, path: data.path, width: data.width, height: data.height });
+        return;
+      }
+      reject(new ApiError(data.error?.code ?? "unknown", data.error?.message ?? "That image couldn't be uploaded. Please try again.", xhr.status));
+    };
+    xhr.send(optimized.blob);
+  });
 }

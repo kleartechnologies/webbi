@@ -60,6 +60,7 @@ One Next.js app serves everything. Each customer website is a validated JSON doc
 | `/dashboard`, `/signin` | Owner's sites and sign-in |
 | `/w/{slug}` | Public renderer. Reads `publicSites/{slug}` (cached, invalidated on publish) or a built-in demo site |
 | `/api/sites`, `/api/sites/delete` | Start a website (one unpublished website per account, 3 starts a day) and delete an unpaid draft |
+| `/api/sites/images?siteId=…` | The only way a photo reaches Storage: checked, stored and counted on the server |
 | `/api/ai/understand`, `/api/ai/generate` | Server-only AI calls for one of the caller's own drafts: the browser sends only `{ siteId }` and the server builds the request from the saved site (the OpenAI key never reaches the browser) |
 | `/api/publish/slug`, `/checkout`, `/confirm`, `/republish` | Slug availability, Billplz bill creation, return-page payment confirmation, push edits to a paid site |
 | `/api/payments/webhook` | Billplz payment callback (X Signature verified) |
@@ -84,13 +85,25 @@ Firestore collections (rules in `firestore.rules`):
 | --- | --- | --- |
 | `users/{uid}` | owner | profile |
 | `sites/{siteId}` | owner reads; owner may update only `draft`, `sourceDescription`, `generation`, `language`, `updatedAt`; create and delete are server-only (`/api/sites`) | draft content, flow status, `slug`/`paid`/`published` (server-only) |
-| `userQuotas/{uid}` | server-only | `openDraftSiteId` (the account's one unpublished website), `draftsCreatedToday` / `draftsDay` (Malaysia calendar day), and AI requests `aiRequestsToday` / `aiDay` and `aiRequestsThisMonth` / `aiMonth` |
+| `userQuotas/{uid}` | server-only | `openDraftSiteId` (the account's one unpublished website), `draftsCreatedToday` / `draftsDay` (Malaysia calendar day), AI requests `aiRequestsToday` / `aiDay` and `aiRequestsThisMonth` / `aiMonth`, and photo uploads `uploadsToday` / `uploadsDay` |
 | `siteAi/{siteId}` | server-only | one small document per website: `understandings`, `generations` and the AI `lock`; deleted with the draft |
 | `publicSites/{slug}` | world-readable, server-only writes | the published copy of a site, plus `siteId` (never the owner) |
 | `slugs/{slug}` | server-only | slug → siteId reservation, claimed inside the payment transaction |
 | `payments/{id}` | owner reads, server-only writes | one record per checkout: provider, amount, status |
 
-Photos go to Storage at `users/{uid}/sites/{siteId}/…` (owner-only through the rules; the app stores tokenised download URLs, which is what the public renderer uses). Unpublished sites are never readable by anyone but their owner.
+Unpublished sites are never readable by anyone but their owner.
+
+Photo uploads (`src/lib/images/storage.ts`). The browser resizes a photo (1600px WebP, as before) and POSTs its bytes to `/api/sites/images?siteId=…`. `storage.rules` refuse every browser write and delete, the owner's included, so this route is the only way in. Each upload:
+
+1. needs a signed-in account (401 without one, 403 for a guest) and a website that exists (404), belongs to the caller (403) and is a draft or a paid live site (the editor changes live sites before a republish);
+2. is at most **5 MB** (413; the body is read in a stream and dropped at the limit);
+3. is a **JPEG, PNG or WebP by its bytes**: the file signature and header are parsed (`src/lib/images/sniff.ts`, no image library), and the declared Content-Type must match what the bytes are (415). SVG, HTML, anything disguised as an image and unreadable headers are refused. Rules can't read file bytes, which is why the check lives on the server and browsers can't write at all;
+4. counts against **50 uploads a Malaysia day per account** (429). The count is taken in a transaction and given back if the upload then fails; refused uploads never count, and removing a photo never gives one back;
+5. is stored at `users/{uid}/sites/{siteId}/img_{random}.{jpg|png|webp}`, a path built only from the verified uid, the checked site id and a random name. File names, paths, uids or folders sent by the browser are ignored and never echoed back. The response is `{ url, path, width, height }` with the usual tokenised Firebase download URL (the bucket stays private; published pages use the same URLs as before).
+
+Old photos are never deleted when one is replaced or removed, because the live page, an unsaved editor change or the details step may still show them. Instead, each upload clears files in that website's folder that none of the owner's websites reference (draft, published copy, confirmed details) and that are more than a day old. After that sweep a website may hold at most **100 files** (429). Deleting a draft (`/api/sites/delete`) removes its folder, keeping any file another of the owner's websites still references; if Storage fails at that point the draft is still deleted, the error is logged and the files stay behind (harmless, private, unlisted). Nothing lists Storage when a page renders.
+
+Files uploaded before this change (then allowed: any `image/*` up to 8 MB, straight from the browser) are left as they are; a few may be SVGs. They are served from Firebase's domain, not Webbi's, and the image optimiser refuses SVG. `next.config.ts` only lets the optimiser fetch `https://firebasestorage.googleapis.com/v0/b/{this project's bucket}/o/…`; any other image address in a draft shows as a broken image rather than being fetched.
 
 Demo sites (`/w/rasa-kampung`, `/w/hafiz-rahman`) are defined in code in `src/lib/site/demo.ts`, are `noindex`, and their slugs are reserved so a customer can't claim them.
 
@@ -135,8 +148,8 @@ Owners can push later edits to a paid site with **Publish changes** in the edito
 ## Tests and QA
 
 ```bash
-npm test          # unit tests (vitest): slug rules, flow resume logic, schema, phone/link helpers, env parsing, Billplz payments, website limits, AI limits and locks (providers faked; no real AI calls)
-npm run test:rules  # Firestore rules + real-transaction race tests (website starts, AI builds) against the Firestore emulator (needs Java and the firebase CLI)
+npm test          # unit tests (vitest): slug rules, flow resume logic, schema, phone/link helpers, env parsing, Billplz payments, website limits, AI limits and locks, photo uploads (providers and Storage faked; no real AI calls)
+npm run test:rules  # Firestore + Storage rules, real-transaction race tests and the upload route with the real Admin SDK, against the Firestore and Storage emulators (needs Java and the firebase CLI)
 npm run lint
 npx tsc --noEmit
 npm run build
@@ -175,6 +188,8 @@ Each `qa:industries` / `qa:publish` run against the real project leaves anonymou
 ```bash
 firebase deploy --only firestore:rules,firestore:indexes,storage --project webbi-85f26
 ```
+
+Deploy `storage.rules` together with the app code that adds `/api/sites/images`: the new rules refuse browser uploads, so rules ahead of the code break uploads, and code without the rules leaves direct browser uploads open.
 
 ## Deploying to Netlify
 

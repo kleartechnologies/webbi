@@ -4,7 +4,8 @@ import Image from "next/image";
 import { useRef, useState } from "react";
 import { Button, ErrorText, Icon, Label, type IconName } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import { deleteSiteImage, uploadSiteImage } from "@/lib/images/upload";
+import { MAX_UPLOAD_BYTES, TOO_LARGE_MESSAGE, UPLOAD_ACCEPT } from "@/lib/images/limits";
+import { uploadSiteImage } from "@/lib/images/upload";
 import { HERO_IMAGE_POSITIONS, type HeroImagePosition, type SiteImage } from "@/lib/site/schema";
 
 /**
@@ -14,8 +15,9 @@ import { HERO_IMAGE_POSITIONS, type HeroImagePosition, type SiteImage } from "@/
  * - "logo":    a business-led business's logo (square)
  * - "hero":    the cover photo the hero shows (wide, with a crop focus)
  *
- * Every variant uploads to the owner's own Storage folder like any other site
- * image; replacing or removing deletes the old file.
+ * Every variant uploads through the server like any other site image. The old
+ * file isn't deleted here: the live page may still show it, so the server
+ * clears it once no saved version of the website uses it.
  */
 export type ImageFieldKind = "profile" | "logo" | "hero";
 
@@ -36,7 +38,7 @@ const COPY: Record<ImageFieldKind, Copy> = {
     label: "Your profile photo",
     help: "Optional. Add a professional photo so customers know who they’re dealing with.",
     spec: "Recommended: square portrait, 1000 × 1000 px or larger",
-    foot: "PNG or JPG • Clear face, shoulders-up works best • Max 5 MB",
+    foot: "JPG, PNG or WebP • Clear face, shoulders-up works best • Max 5 MB",
     add: "Add photo",
     icon: "person",
   },
@@ -45,7 +47,7 @@ const COPY: Record<ImageFieldKind, Copy> = {
     label: "Business logo",
     help: "Optional. Shown beside your business name; without one we use your initial.",
     spec: "Recommended: square image, 1000 × 1000 px or larger",
-    foot: "PNG or JPG • Square works best • Max 5 MB",
+    foot: "JPG, PNG or WebP • Square works best • Max 5 MB",
     add: "Upload logo",
     icon: "storefront",
   },
@@ -54,14 +56,12 @@ const COPY: Record<ImageFieldKind, Copy> = {
     label: "Hero / cover photo",
     help: "Make your website instantly feel like your business.",
     spec: "Recommended: 1600 × 900 px (16:9)",
-    foot: "JPG or PNG • Landscape works best • Max 5 MB",
+    foot: "JPG, PNG or WebP • Landscape works best • Max 5 MB",
     note: "Any shape works — the hero adapts to your photo on phones and desktops. Keep faces and text away from the very edges.",
     add: "Upload cover photo",
     icon: "add_a_photo",
   },
 };
-
-const MAX_BYTES = 5 * 1024 * 1024;
 
 const POSITION_LABEL: Record<HeroImagePosition, string> = { center: "Centre", top: "Top", bottom: "Bottom" };
 
@@ -94,16 +94,15 @@ export function ImageUploadField({
   const upload = async (files: FileList | null) => {
     const file = files?.[0];
     if (!file || !uid) return;
-    if (file.size > MAX_BYTES) {
-      setError("That image is over 5 MB. Choose a smaller one.");
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError(TOO_LARGE_MESSAGE);
       return;
     }
     setError(null);
     setProgress(0);
     onBusy?.(true);
     try {
-      const image = await uploadSiteImage(uid, siteId, file, setProgress);
-      if (value) void deleteSiteImage(value);
+      const image = await uploadSiteImage(siteId, file, setProgress);
       onChange(image);
     } catch (err) {
       setError(err instanceof Error ? err.message : "That image couldn't be uploaded.");
@@ -113,10 +112,7 @@ export function ImageUploadField({
     }
   };
 
-  const remove = () => {
-    if (value) void deleteSiteImage(value);
-    onChange(undefined);
-  };
+  const remove = () => onChange(undefined);
 
   const uploading = progress !== null;
   const noun = kind === "hero" ? "cover photo" : kind === "logo" ? "logo" : "profile photo";
@@ -230,7 +226,7 @@ export function ImageUploadField({
       <input
         ref={fileInput}
         type="file"
-        accept="image/*"
+        accept={UPLOAD_ACCEPT}
         hidden
         onChange={(e) => {
           void upload(e.target.files);

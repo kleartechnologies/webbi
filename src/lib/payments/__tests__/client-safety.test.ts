@@ -120,6 +120,7 @@ describe("Billplz credentials stay on the server", () => {
       "src/lib/ai/index.ts",
       "src/lib/ai/openai.ts",
       "src/lib/ai/anthropic.ts",
+      "src/lib/images/storage.ts",
     ]) {
       expect(SERVER_ONLY.test(read(file)), `${file} must start with import "server-only"`).toBe(true);
     }
@@ -147,6 +148,7 @@ describe("Billplz credentials stay on the server", () => {
           "src/lib/api/http.ts",
           "src/lib/ai/guard.ts",
           "src/lib/ai/index.ts",
+          "src/lib/images/storage.ts",
         ].includes(file),
     );
     expect(serverModules).toEqual([]);

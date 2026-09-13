@@ -11,7 +11,8 @@ import { SiteMissing } from "@/components/app/SiteMissing";
 import { Button, DashedAdd, ErrorText, Icon, Spinner } from "@/components/ui";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { cn } from "@/lib/cn";
-import { deleteSiteImage, uploadSiteImage } from "@/lib/images/upload";
+import { UPLOAD_ACCEPT } from "@/lib/images/limits";
+import { uploadSiteImage } from "@/lib/images/upload";
 import { CATEGORIES } from "@/lib/site/categories";
 import { newId, type GenerationInput, type HeroImagePosition, type SiteImage } from "@/lib/site/schema";
 import { updateSite } from "@/lib/site/store";
@@ -28,7 +29,7 @@ interface Media {
   heroImagePosition?: HeroImagePosition;
 }
 
-const ACCEPT = "image/*";
+const ACCEPT = UPLOAD_ACCEPT;
 const MAX_PHOTOS = 24;
 
 /** The price box shows a fixed "RM" prefix; plain numbers are stored as "RM9.50", anything else verbatim. */
@@ -128,11 +129,7 @@ function ContentForm({ site }: { site: Site }) {
   const updateItem = (id: string, patch: Partial<Item>) =>
     setItems((list) => list.map((i) => (i.id === id ? { ...i, ...patch } : i)));
 
-  const removeItem = (id: string) => {
-    const item = items.find((i) => i.id === id);
-    if (item?.image) void deleteSiteImage(item.image);
-    setItems((list) => list.filter((i) => i.id !== id));
-  };
+  const removeItem = (id: string) => setItems((list) => list.filter((i) => i.id !== id));
 
   const addItem = () => {
     const id = newId("item");
@@ -155,7 +152,7 @@ function ContentForm({ site }: { site: Site }) {
     for (const [index, file] of list.entries()) {
       const key = keys[index];
       try {
-        const image = await uploadSiteImage(user.uid, site.id, file, (p) => setUploading((u) => ({ ...u, [key]: p })));
+        const image = await uploadSiteImage(site.id, file, (p) => setUploading((u) => ({ ...u, [key]: p })));
         next = [...next, image];
         setPhotos(next);
       } catch (err) {
@@ -174,7 +171,6 @@ function ContentForm({ site }: { site: Site }) {
   const removePhoto = (image: SiteImage) => {
     const next = photos.filter((p) => p !== image);
     setPhotos(next);
-    void deleteSiteImage(image);
     void persist(items, next, media);
   };
 
@@ -192,9 +188,7 @@ function ContentForm({ site }: { site: Site }) {
     setError(null);
     setUploading((u) => ({ ...u, [id]: 0 }));
     try {
-      const image = await uploadSiteImage(user.uid, site.id, file, (p) => setUploading((u) => ({ ...u, [id]: p })));
-      const previous = items.find((i) => i.id === id)?.image;
-      if (previous) void deleteSiteImage(previous);
+      const image = await uploadSiteImage(site.id, file, (p) => setUploading((u) => ({ ...u, [id]: p })));
       updateItem(id, { image });
     } catch (err) {
       setError(err instanceof Error ? err.message : "That photo couldn't be uploaded.");

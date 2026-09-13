@@ -4,7 +4,8 @@ import Image from "next/image";
 import { useRef, useState } from "react";
 import { DashedAdd, Field, Icon, Input, Spinner, Textarea } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import { deleteSiteImage, uploadSiteImage } from "@/lib/images/upload";
+import { UPLOAD_ACCEPT } from "@/lib/images/limits";
+import { uploadSiteImage } from "@/lib/images/upload";
 import { CATEGORIES } from "@/lib/site/categories";
 import { newId, type OfferingItem, type SiteContent } from "@/lib/site/schema";
 import { IconButton, SectionHeading } from "./EditorBits";
@@ -15,7 +16,6 @@ interface Props {
   site: SiteContent;
   update: Update;
   issues: Issues;
-  uid: string;
   siteId: string;
 }
 
@@ -35,7 +35,7 @@ function storePrice(text: string): string | undefined {
 }
 
 /** Products / services / menu: structured rows, no free-form layout. */
-export function OfferingsTab({ site, update, issues, uid, siteId }: Props) {
+export function OfferingsTab({ site, update, issues, siteId }: Props) {
   const section = findSection(site, "offerings");
   const category = CATEGORIES[site.business.category];
   const idx = sectionIndex(site, "offerings");
@@ -84,11 +84,7 @@ export function OfferingsTab({ site, update, issues, uid, siteId }: Props) {
     requestAnimationFrame(() => document.getElementById(`item-${id}`)?.focus());
   };
 
-  const removeItem = (id: string) => {
-    const item = items.find((i) => i.id === id);
-    if (item?.image) void deleteSiteImage(item.image);
-    setItems(items.filter((i) => i.id !== id));
-  };
+  const removeItem = (id: string) => setItems(items.filter((i) => i.id !== id));
 
   const pickPhoto = (id: string) => {
     target.current = id;
@@ -102,12 +98,10 @@ export function OfferingsTab({ site, update, issues, uid, siteId }: Props) {
     setError(null);
     setUploading((u) => ({ ...u, [id]: 0 }));
     try {
-      const image = await uploadSiteImage(uid, siteId, file, (p) => setUploading((u) => ({ ...u, [id]: p })));
+      const image = await uploadSiteImage(siteId, file, (p) => setUploading((u) => ({ ...u, [id]: p })));
       update((d) => {
         const current = findSection(d, "offerings");
         if (!current) return d;
-        const previous = current.items.find((i) => i.id === id)?.image;
-        if (previous) void deleteSiteImage(previous);
         return patchSection(d, "offerings", { items: current.items.map((i) => (i.id === id ? { ...i, image } : i)) });
       });
     } catch (err) {
@@ -122,11 +116,7 @@ export function OfferingsTab({ site, update, issues, uid, siteId }: Props) {
     }
   };
 
-  const removePhoto = (id: string) => {
-    const item = items.find((i) => i.id === id);
-    if (item?.image) void deleteSiteImage(item.image);
-    patchItem(id, { image: undefined });
-  };
+  const removePhoto = (id: string) => patchItem(id, { image: undefined });
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -254,7 +244,7 @@ export function OfferingsTab({ site, update, issues, uid, siteId }: Props) {
       <input
         ref={fileInput}
         type="file"
-        accept="image/*"
+        accept={UPLOAD_ACCEPT}
         hidden
         onChange={(e) => {
           void uploadPhoto(e.target.files);

@@ -3,7 +3,8 @@
 import Image from "next/image";
 import { useRef, useState } from "react";
 import { Icon, Spinner } from "@/components/ui";
-import { deleteSiteImage, uploadSiteImage } from "@/lib/images/upload";
+import { UPLOAD_ACCEPT } from "@/lib/images/limits";
+import { uploadSiteImage } from "@/lib/images/upload";
 import type { SiteContent } from "@/lib/site/schema";
 import { Badge, SectionHeading } from "./EditorBits";
 import { galleryPhotos, setGalleryPhotos, setSitePhotos, sitePhotos } from "./sections";
@@ -12,14 +13,13 @@ import type { Update } from "./useDraft";
 interface Props {
   site: SiteContent;
   update: Update;
-  uid: string;
   siteId: string;
 }
 
 /** Hero (first) + gallery photos; 24 max like the gallery schema. */
 const MAX_PHOTOS = 25;
 
-export function PhotosTab({ site, update, uid, siteId }: Props) {
+export function PhotosTab({ site, update, siteId }: Props) {
   // With a dedicated cover photo (Business tab) this tab is the gallery only;
   // older sites without one keep "first photo is the hero".
   const hasCover = Boolean(site.business.heroImage);
@@ -41,11 +41,11 @@ export function PhotosTab({ site, update, uid, siteId }: Props) {
         const key = `up_${Date.now()}_${index}`;
         setUploading((u) => ({ ...u, [key]: 0 }));
         try {
-          const image = await uploadSiteImage(uid, siteId, file, (p) => setUploading((u) => ({ ...u, [key]: p })));
+          const image = await uploadSiteImage(siteId, file, (p) => setUploading((u) => ({ ...u, [key]: p })));
           update((d) => write(d, [...read(d), image]));
         } catch (err) {
           console.error(err);
-          setError("One of the photos couldn't be uploaded. Try a smaller image.");
+          setError(err instanceof Error && err.message ? err.message : "One of the photos couldn't be uploaded. Try a smaller image.");
         } finally {
           setUploading((u) => {
             const rest = { ...u };
@@ -60,7 +60,6 @@ export function PhotosTab({ site, update, uid, siteId }: Props) {
   const remove = (index: number) => {
     const photo = photos[index];
     if (!photo) return;
-    void deleteSiteImage(photo);
     update((d) => write(d, read(d).filter((_, i) => i !== index)));
   };
 
@@ -130,7 +129,7 @@ export function PhotosTab({ site, update, uid, siteId }: Props) {
       <input
         ref={fileInput}
         type="file"
-        accept="image/*"
+        accept={UPLOAD_ACCEPT}
         multiple
         hidden
         onChange={(e) => {

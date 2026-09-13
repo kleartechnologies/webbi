@@ -4,14 +4,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button, Icon, Toggle } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import { deleteSiteImage } from "@/lib/images/upload";
 import { publicSitePath, siteHost } from "@/lib/site/flow";
 import { LANGUAGES, type Language, type SiteContent } from "@/lib/site/schema";
 import { slugify } from "@/lib/site/slug";
 import { deleteDraftSite } from "@/lib/site/store";
 import type { Site } from "@/lib/site/types";
 import { Badge, SettingsRow } from "./EditorBits";
-import { allImages } from "./sections";
 import type { Update } from "./useDraft";
 
 interface Props {
@@ -40,9 +38,8 @@ export function SettingsTab({ site, draft, update }: Props) {
     setDeleting(true);
     setDeleteError(null);
     try {
+      // The server deletes the draft's photos along with it.
       await deleteDraftSite(site.id);
-      // Best effort: free the uploaded photos once the document is gone.
-      for (const image of allImages(draft)) void deleteSiteImage(image);
       router.replace("/dashboard");
     } catch (error) {
       console.error(error);

@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import { UnauthorizedError } from "@/lib/auth/verify";
 import { AiError, AiQuotaError } from "@/lib/ai/errors";
 import { AdminNotConfiguredError } from "@/lib/firebase/admin";
+import { UploadError } from "@/lib/images/storage";
 import { PaymentError } from "@/lib/payments/provider";
 import { DraftLimitError } from "@/lib/site/drafts";
 import { PublishError } from "@/lib/site/publish";
@@ -14,6 +15,8 @@ export type ApiErrorCode =
   | "not_found"
   | "conflict"
   | "bad_request"
+  | "payload_too_large"
+  | "unsupported_media_type"
   | "rate_limited"
   | "ai_not_configured"
   | "ai_failed"
@@ -44,6 +47,11 @@ export function handleApiError(error: unknown) {
     }
     if (error.code === "rate_limited") return apiError(429, "rate_limited", error.message);
     return apiError(502, "ai_failed", error.message);
+  }
+  if (error instanceof UploadError) {
+    if (error.code === "too_large") return apiError(413, "payload_too_large", error.message);
+    if (error.code === "unsupported_type") return apiError(415, "unsupported_media_type", error.message);
+    return apiError(429, "rate_limited", error.message, { reason: error.code });
   }
   if (error instanceof DraftLimitError) {
     if (error.code === "daily_limit") return apiError(429, "rate_limited", error.message);

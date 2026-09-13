@@ -1,6 +1,7 @@
 /**
  * Firebase web SDK (browser). Everything here runs under the security rules in
- * firestore.rules / storage.rules. Import only from client components.
+ * firestore.rules. Import only from client components. There is deliberately
+ * no Storage client: photos go through POST /api/sites/images.
  */
 import { getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import { connectAuthEmulator, getAuth, type Auth } from "firebase/auth";
@@ -10,13 +11,11 @@ import {
   initializeFirestore,
   type Firestore,
 } from "firebase/firestore";
-import { connectStorageEmulator, getStorage, type FirebaseStorage } from "firebase/storage";
 import { publicEnv } from "@/lib/env";
 
 let app: FirebaseApp | undefined;
 let db: Firestore | undefined;
 let auth: Auth | undefined;
-let storage: FirebaseStorage | undefined;
 
 /** Local development against the Firebase Emulator Suite (never in production builds). */
 const USE_EMULATOR = process.env.NEXT_PUBLIC_FIREBASE_EMULATOR === "1" && process.env.NODE_ENV !== "production";
@@ -47,11 +46,4 @@ export function getClientDb(): Firestore {
   }
   if (USE_EMULATOR) connectFirestoreEmulator(db, EMULATOR_HOST, 8080);
   return db;
-}
-
-export function getClientStorage(): FirebaseStorage {
-  if (storage) return storage;
-  storage = getStorage(getFirebaseApp());
-  if (USE_EMULATOR) connectStorageEmulator(storage, EMULATOR_HOST, 9199);
-  return storage;
 }

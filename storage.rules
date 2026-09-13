@@ -2,21 +2,25 @@ rules_version = '2';
 
 // Webbi Storage rules.
 //
-// Files live under users/{uid}/sites/{siteId}/{fileName}. Only the owner can
-// upload or delete, uploads must be images under 8 MB. Reads through the rules
-// are owner-only; the app renders images through Firebase download URLs, which
-// carry an unguessable token and work for published sites without exposing
-// the bucket to listing or guessing.
+// Files live under users/{uid}/sites/{siteId}/{fileName}. No browser may
+// create, replace or delete a file, including the owner: every upload goes
+// through POST /api/sites/images, which checks the account, that it owns the
+// website, the size (5 MB), the real file type from its bytes (JPEG, PNG or
+// WebP) and the upload limits, then writes with the Admin SDK (which these
+// rules don't apply to). Rules can't read a file's bytes, so a browser write
+// here could never be held to the same checks; that is why there is none.
+//
+// Reads through the rules stay owner-only. The app shows images through
+// Firebase download URLs, which carry an unguessable token and work for
+// published sites without exposing the bucket to listing or guessing.
 
 service firebase.storage {
   match /b/{bucket}/o {
     match /users/{uid}/sites/{siteId}/{fileName} {
-      allow read: if request.auth != null && request.auth.uid == uid;
-      allow create, update: if request.auth != null
+      allow read: if request.auth != null
         && request.auth.uid == uid
-        && request.resource.size < 8 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
-      allow delete: if request.auth != null && request.auth.uid == uid;
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+      allow write: if false;
     }
     match /{allPaths=**} {
       allow read, write: if false;

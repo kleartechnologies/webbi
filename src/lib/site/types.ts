@@ -60,6 +60,10 @@ export interface UserQuotaDoc {
   /** Malaysia month (YYYY-MM) that aiRequestsThisMonth counts. */
   aiMonth?: string;
   aiRequestsThisMonth?: number;
+  /** Malaysia day (YYYY-MM-DD) that uploadsToday counts. */
+  uploadsDay?: string;
+  /** Photos stored on uploadsDay. Refused uploads don't count; deleting a photo never lowers it. See src/lib/images/storage.ts. */
+  uploadsToday?: number;
   updatedAt: Timestamp;
 }
 

@@ -205,8 +205,8 @@ function Editor({ site, initial }: { site: Site; initial: SiteContent }) {
           </p>
         ) : null}
         {tab === "business" ? <BusinessTab site={draft} update={update} issues={issues} uid={uid} siteId={site.id} /> : null}
-        {tab === "offerings" ? <OfferingsTab site={draft} update={update} issues={issues} uid={uid} siteId={site.id} /> : null}
-        {tab === "photos" ? <PhotosTab site={draft} update={update} uid={uid} siteId={site.id} /> : null}
+        {tab === "offerings" ? <OfferingsTab site={draft} update={update} issues={issues} siteId={site.id} /> : null}
+        {tab === "photos" ? <PhotosTab site={draft} update={update} siteId={site.id} /> : null}
         {tab === "style" ? <StyleTab site={draft} update={update} issues={issues} /> : null}
         {tab === "settings" ? <SettingsTab site={site} draft={draft} update={update} /> : null}
       </div>
