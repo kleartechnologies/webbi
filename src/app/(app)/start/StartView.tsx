@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AppPage } from "@/components/app/AppHeader";
 import { CenteredWordmark, FooterNote, StickyFooter } from "@/components/app/FlowChrome";
+import { RequireAuth } from "@/components/app/RequireAuth";
 import { Button, ErrorText, Icon, Textarea } from "@/components/ui";
 import { callApi, errorMessage } from "@/lib/api/client";
-import { ensureUser } from "@/lib/auth/actions";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import type { Understanding } from "@/lib/site/schema";
 import { createSite } from "@/lib/site/store";
@@ -18,9 +18,22 @@ const EXAMPLES = [
   "Saya buat servis dan pasang aircond area Cheras, harga bermula RM80.",
 ];
 
+/**
+ * Step 01: the description. Building is account-first — a visitor who presses
+ * "Create My Website" signs up here first and comes straight back, so every
+ * draft has an owner from its first keystroke.
+ */
 export function StartView() {
+  return (
+    <RequireAuth authMode="create">
+      <Start />
+    </RequireAuth>
+  );
+}
+
+function Start() {
   const router = useRouter();
-  const { status } = useAuth();
+  const { user } = useAuth();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +41,7 @@ export function StartView() {
 
   const submit = async () => {
     const description = text.trim();
+    if (!user) return;
     if (description.length < 12) {
       setError("Tell us a bit more. One or two sentences is enough.");
       return;
@@ -35,7 +49,6 @@ export function StartView() {
     setBusy(true);
     setError(null);
     try {
-      const user = await ensureUser();
       const { understanding } = await callApi<{ understanding: Understanding }>("/api/ai/understand", { description });
       const siteId = await createSite({
         ownerUid: user.uid,
@@ -111,15 +124,9 @@ export function StartView() {
         </Button>
         <FooterNote>
           About 2 minutes. No design skills needed.{" "}
-          {status === "account" ? (
-            <Link href="/dashboard" className="font-semibold text-navy">
-              Dashboard
-            </Link>
-          ) : (
-            <Link href="/signin?next=%2Fstart" className="font-semibold text-navy">
-              Sign in
-            </Link>
-          )}
+          <Link href="/dashboard" className="font-semibold text-navy">
+            Dashboard
+          </Link>
         </FooterNote>
       </StickyFooter>
     </AppPage>

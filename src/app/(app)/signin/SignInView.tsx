@@ -3,20 +3,19 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppPage } from "@/components/app/AppHeader";
-import { AuthForm, LegalNote, type AuthMode } from "@/components/app/AuthForm";
+import { AuthForm, LegalNote } from "@/components/app/AuthForm";
 import { Wordmark } from "@/components/ui";
 import { useAuth } from "@/lib/auth/AuthProvider";
-
-function safeNext(value: string | null): string {
-  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/dashboard";
-}
+import { authMode, isCreateIntent, safeNext, type AuthMode } from "@/lib/auth/intent";
 
 export function SignInView() {
   const router = useRouter();
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
-  const [mode, setMode] = useState<AuthMode>(params.get("mode") === "create" ? "create" : "signin");
+  const [mode, setMode] = useState<AuthMode>(authMode(params.get("mode")));
   const { status } = useAuth();
+  /** They pressed "Create My Website"; the account is the step before the website. */
+  const building = isCreateIntent(next);
 
   // Already signed in with a real account → nothing to do here.
   useEffect(() => {
@@ -30,11 +29,17 @@ export function SignInView() {
       </div>
       <div className="flex flex-col gap-6 pt-8">
         <div className="flex flex-col gap-2">
-          <h1 className="text-h1 sm:text-[34px]">{mode === "create" ? "Create your account" : "Welcome back"}</h1>
+          <h1 className="text-h1 sm:text-[34px]">
+            {mode === "create" ? "Create your Webbi account" : "Welcome back"}
+          </h1>
           <p className="text-[14px] leading-[1.5] text-muted">
             {mode === "create"
-              ? "So you can edit and republish anytime, from any phone."
-              : "Sign in to edit, share or republish your Webbi."}
+              ? building
+                ? "One step, then you tell us about your business and we build your website."
+                : "So you can edit and republish anytime, from any phone."
+              : building
+                ? "Sign in and we'll take you straight to building your website."
+                : "Sign in to edit, share or republish your Webbi."}
           </p>
         </div>
         <AuthForm mode={mode} onModeChange={setMode} onSuccess={() => router.replace(next)} />

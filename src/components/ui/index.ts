@@ -4,6 +4,7 @@ export { Chip } from "./Chip";
 export { Container } from "./Container";
 export { DashedAdd } from "./DashedAdd";
 export { ErrorText, Field, Helper, Input, Label, Textarea } from "./Field";
+export { GoogleG } from "./GoogleG";
 export { Icon, type IconName } from "./Icon";
 export { Spinner } from "./Spinner";
 export { StepHeader } from "./StepHeader";

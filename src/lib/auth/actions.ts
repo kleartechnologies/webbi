@@ -1,8 +1,8 @@
 /**
- * Auth actions (browser only). Webbi is anonymous-first: a visitor gets an
- * anonymous Firebase user when they start building, and turns it into a real
- * account (Google or email) when they are ready to publish — keeping the draft
- * they already built.
+ * Auth actions (browser only). Webbi is account-first: a visitor creates their
+ * account (Google or email) before they start building, so every draft has a
+ * real owner. The anonymous branches below are the legacy path — drafts started
+ * before that change still link their anonymous user into an account here.
  */
 import {
   EmailAuthProvider,
@@ -10,7 +10,6 @@ import {
   linkWithCredential,
   linkWithPopup,
   sendPasswordResetEmail,
-  signInAnonymously,
   signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -36,13 +35,6 @@ export interface AuthResult {
   user: User;
   /** True when we signed in to a different, pre-existing account. */
   switched: boolean;
-}
-
-export async function ensureUser(): Promise<User> {
-  const auth = getClientAuth();
-  if (auth.currentUser) return auth.currentUser;
-  const result = await signInAnonymously(auth);
-  return result.user;
 }
 
 export async function continueWithGoogle<T>(handoff?: Handoff<T>): Promise<AuthResult> {

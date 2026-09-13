@@ -4,16 +4,21 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
 import { Spinner } from "@/components/ui";
 import { useAuth, type AuthStatus } from "@/lib/auth/AuthProvider";
+import { authPath, type AuthMode } from "@/lib/auth/intent";
 
 /**
  * Gate for app screens. `allow` lists the statuses that may see the children;
- * anyone else is sent to /signin (and back here afterwards).
+ * anyone else is sent to /signin and back here afterwards. `authMode` picks the
+ * face they land on: a screen a new visitor reaches first (the creation flow)
+ * asks them to sign up, everything else asks them to sign in.
  */
 export function RequireAuth({
   allow = ["account"],
+  authMode = "signin",
   children,
 }: {
   allow?: AuthStatus[];
+  authMode?: AuthMode;
   children: ReactNode;
 }) {
   const { status } = useAuth();
@@ -23,8 +28,8 @@ export function RequireAuth({
 
   useEffect(() => {
     if (status === "loading" || allowed) return;
-    router.replace(`/signin?next=${encodeURIComponent(pathname)}`);
-  }, [status, allowed, pathname, router]);
+    router.replace(authPath(pathname, authMode));
+  }, [status, allowed, pathname, authMode, router]);
 
   if (!allowed) {
     return (

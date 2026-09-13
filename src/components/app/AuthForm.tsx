@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
-import { Button, ErrorText, Field, Icon, Input } from "@/components/ui";
+import { Button, ErrorText, Field, GoogleG, Icon, Input } from "@/components/ui";
 import {
   continueWithGoogle,
   createWithEmail,
@@ -12,8 +12,9 @@ import {
   type Handoff,
 } from "@/lib/auth/actions";
 import { authErrorCode, authErrorMessage } from "@/lib/auth/errors";
+import type { AuthMode } from "@/lib/auth/intent";
 
-export type AuthMode = "create" | "signin";
+export type { AuthMode };
 
 interface AuthFormProps<T> {
   mode: AuthMode;
@@ -21,16 +22,6 @@ interface AuthFormProps<T> {
   onSuccess: (result: AuthResult) => void | Promise<void>;
   /** Carries an anonymous draft across to a pre-existing account. */
   handoff?: Handoff<T>;
-}
-
-function GoogleMark() {
-  return (
-    <span
-      aria-hidden
-      className="inline-block h-5 w-5 rounded-full"
-      style={{ background: "conic-gradient(#EA4335 0 25%, #FBBC05 0 50%, #34A853 0 75%, #4285F4 0)" }}
-    />
-  );
 }
 
 export function AuthForm<T = unknown>({ mode, onModeChange, onSuccess, handoff }: AuthFormProps<T>) {
@@ -90,7 +81,7 @@ export function AuthForm<T = unknown>({ mode, onModeChange, onSuccess, handoff }
         disabled={busy !== null}
         onClick={() => run("google", async () => onSuccess(await continueWithGoogle(handoff)))}
       >
-        {busy === "google" ? null : <GoogleMark />}
+        {busy === "google" ? null : <GoogleG />}
         Continue with Google
       </Button>
 
@@ -181,9 +172,9 @@ export function AuthForm<T = unknown>({ mode, onModeChange, onSuccess, handoff }
         ) : (
           <p>
             New to Webbi?{" "}
-            <Link href="/start" className="font-semibold text-navy">
-              Build your website first
-            </Link>
+            <button type="button" onClick={() => onModeChange("create")} className="font-semibold text-navy">
+              Create an account
+            </button>
           </p>
         )}
       </div>

@@ -9,15 +9,19 @@
 //
 // Env: QA_BASE_URL (default http://localhost:3000), QA_CHROME (Chrome binary path),
 // QA_ONLY (comma-separated industry keys, e.g. QA_ONLY=car) to run a subset.
-// Each industry runs in a fresh browser context (fresh anonymous user) so the per-user
+// Each industry runs in a fresh browser context, signing up its own account (building is
+// account-first) so the per-user
 // AI rate limits are not hit. Screenshots + industries-report.json land in scripts/qa/shots/.
 import puppeteer from "puppeteer-core";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { imageInput, writeAvatarPng, writeCoverPng, writeLogoPng } from "./lib.mjs";
+import { imageInput, signUp, writeAvatarPng, writeCoverPng, writeLogoPng } from "./lib.mjs";
 
 const base = (process.env.QA_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
+/** Unique per run so each QA account is its own; the emulator keeps users between runs. */
+const runTag = Date.now().toString(36).slice(-5);
+
 const chrome = process.env.QA_CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const shots = path.join(path.dirname(fileURLToPath(import.meta.url)), "shots");
 mkdirSync(shots, { recursive: true });
@@ -192,8 +196,7 @@ for (const industry of selected) {
 
   const check = (ok, label) => { entry.checks.push({ ok, label }); if (!ok) failed++; };
   try {
-    await page.goto(`${base}/start`, { waitUntil: "load" });
-    await page.waitForSelector("textarea", { timeout: 20000 });
+    await signUp(page, base, { name: "QA", email: `qa-${industry.key}-${runTag}@example.com` });
     await page.type("textarea", industry.description);
     await clickText(page, "button", "Continue", true);
     await page.waitForFunction(() => location.pathname.includes("/confirm") || document.querySelector("[role=alert]"), { timeout: 90000 });

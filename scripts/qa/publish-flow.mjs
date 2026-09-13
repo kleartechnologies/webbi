@@ -7,6 +7,7 @@
 //      FIRESTORE_EMULATOR_HOST (default 127.0.0.1:8080), QA_PROJECT (default webbi-85f26).
 // Screenshots land in scripts/qa/shots/ (git-ignored). Exit code 1 if any step fails.
 import puppeteer from "puppeteer-core";
+import { signUp } from "./lib.mjs";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -80,18 +81,16 @@ const onboard = async (bizName) => {
   return page.url().match(/\/s\/([^/]+)\//)[1];
 };
 
+// Building is account-first: a new visitor signs up before they describe anything.
+await step("sign up → creation flow", async () => {
+  await signUp(page, base, { name: "Hafiz", email: `qa-${tag}@example.com` });
+});
+
 await step("onboarding → ready", async () => { siteId = await onboard(name); });
 
-await step("guest Publish → account → /publish", async () => {
+await step("Publish → /publish (the account already exists)", async () => {
   await clickText("a", "Publish");
-  await page.waitForFunction(() => location.pathname.endsWith("/account"), { timeout: 15000 });
-  await page.waitForSelector("#auth-email", { timeout: 15000 });
-  const nameField = await page.$("#auth-name");
-  if (nameField) await nameField.type("Hafiz");
-  await page.type("#auth-email", `qa-${tag}@example.com`);
-  await page.type("#auth-password", "password123");
-  await page.click("button[type=submit]");
-  await page.waitForFunction(() => location.pathname.endsWith("/publish"), { timeout: 30000 });
+  await page.waitForFunction(() => location.pathname.endsWith("/publish"), { timeout: 20000 });
 });
 
 await step("slug suggested and available", async () => {

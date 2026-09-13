@@ -14,9 +14,13 @@ import puppeteer from "puppeteer-core";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { imageInput, profilePhotoInput, writeAvatarPng, writeCoverPng, writeLogoPng } from "./lib.mjs";
+import { imageInput, profilePhotoInput, signUp, writeAvatarPng, writeCoverPng, writeLogoPng } from "./lib.mjs";
 
 const base = (process.env.QA_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
+/** Unique per run so each QA account is its own; the emulator keeps users between runs. */
+const runTag = Date.now().toString(36).slice(-5);
+let onboarded = 0;
+
 const chrome = process.env.QA_CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const shots = path.join(path.dirname(fileURLToPath(import.meta.url)), "shots");
 mkdirSync(shots, { recursive: true });
@@ -70,7 +74,7 @@ const clickText = async (page, sel, label, exact = false) => {
 const bodyText = (page) => page.evaluate(() => document.body.innerText);
 const retype = async (page, sel, value) => { await page.$eval(sel, (e) => { e.focus(); e.select(); }); await page.keyboard.type(value); };
 
-/** /start → confirm (fills WhatsApp + optional address / social handles) → content. Returns the generate API body once built. */
+/** Sign up → /start → confirm (fills WhatsApp + optional address / social handles) → content. Returns the generate API body once built. */
 async function onboard(page, description, { address, name, socials } = {}) {
   const api = {};
   const onResponse = async (res) => {
@@ -79,8 +83,7 @@ async function onboard(page, description, { address, name, socials } = {}) {
     }
   };
   page.on("response", onResponse);
-  await page.goto(`${base}/start`, { waitUntil: "load" });
-  await page.waitForSelector("textarea", { timeout: 20000 });
+  await signUp(page, base, { name: "QA", email: `qa-p12-${runTag}-${onboarded++}@example.com` });
   await page.type("textarea", description);
   await clickText(page, "button", "Continue", true);
   await page.waitForFunction(() => location.pathname.includes("/confirm"), { timeout: 60000 });
@@ -174,16 +177,10 @@ const savedOn = async (page) => {
 };
 
 /** Publish (mock payment) from the Ready screen with a unique slug; returns the slug. */
-async function publish(page, { name, slug, tag }) {
+async function publish(page, { slug, tag }) {
+  // The owner signed up before they described the business, so Publish goes straight through.
   await clickText(page, "a", "Publish");
-  await page.waitForFunction(() => location.pathname.endsWith("/account"), { timeout: 15000 });
-  await page.waitForSelector("#auth-email", { timeout: 15000 });
-  const nameField = await page.$("#auth-name");
-  if (nameField) await nameField.type(name);
-  await page.type("#auth-email", `qa-${slug}-${tag}@example.com`);
-  await page.type("#auth-password", "password123");
-  await page.click("button[type=submit]");
-  await page.waitForFunction(() => location.pathname.endsWith("/publish"), { timeout: 30000 });
+  await page.waitForFunction(() => location.pathname.endsWith("/publish"), { timeout: 20000 });
   await page.waitForSelector("#slug", { timeout: 15000 });
   // A unique slug so repeated runs against the same emulator don't collide ("Taken. Use amir-2").
   const full = `${slug}-${tag}`;
@@ -327,7 +324,7 @@ const profileFacts = (page) =>
   });
 
   await step(page, "A5 publish (mock payment) → live", async () => {
-    slug = await publish(page, { name: "Amir", slug: "amir-p12", tag });
+    slug = await publish(page, { slug: "amir-p12", tag });
   });
 
   const visitorCtx = await browser.createBrowserContext();
@@ -551,7 +548,7 @@ const profileFacts = (page) =>
   });
 
   await step(page, "B4 restaurant publish → public page on mobile + desktop matches the preview", async () => {
-    slug = await publish(page, { name: "Mak Nah", slug: "maknah-p12", tag });
+    slug = await publish(page, { slug: "maknah-p12", tag });
     // A separate context: the owner's tab keeps its Firestore channels, the visitor must not share Chrome's per-host connection cap.
     const visitorCtx = await browser.createBrowserContext();
     const visitor = await visitorCtx.newPage();

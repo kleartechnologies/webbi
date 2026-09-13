@@ -102,3 +102,22 @@ export async function imageInput(page, id) {
 
 /** The profile-photo <input type=file> on the Content step or the editor's Business tab. */
 export const profilePhotoInput = (page) => imageInput(page, "profile-photo");
+
+/**
+ * Creates a Webbi account and lands on the creation flow. Building is
+ * account-first, so every QA run that enters /start has to sign up the way a
+ * new visitor does: /signin?mode=create&next=/start → the form → /start.
+ * Returns the credentials so a later step can sign back in as the same person.
+ */
+export async function signUp(page, base, { name = "QA Tester", email, password = "password123" } = {}) {
+  const address = email || `qa-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}@example.com`;
+  await page.goto(`${base}/signin?mode=create&next=%2Fstart`, { waitUntil: "load" });
+  await page.waitForSelector("#auth-name", { timeout: 20000 });
+  await page.type("#auth-name", name);
+  await page.type("#auth-email", address);
+  await page.type("#auth-password", password);
+  await page.click("button[type=submit]");
+  await page.waitForFunction(() => location.pathname === "/start", { timeout: 30000 });
+  await page.waitForSelector("textarea", { timeout: 20000 });
+  return { name, email: address, password };
+}

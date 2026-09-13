@@ -1,14 +1,16 @@
-// Removes the anonymous QA users (and their draft sites) that `qa:industries` /
-// `qa:publish` leave behind in the REAL Firebase project.
+// Removes the throwaway QA users (and their draft sites) that `qa:industries` /
+// `qa:publish` / `qa:auth` leave behind in the REAL Firebase project.
 //
 //   node scripts/qa/cleanup-anonymous.mjs           # dry run: lists what would go
 //   node scripts/qa/cleanup-anonymous.mjs --apply   # deletes it
 //
 // Needs `gcloud auth login` (uses your gcloud access token; nothing is stored).
-// Only touches Auth users with NO sign-in provider and NO email, their `sites`
-// docs that are still drafts, their `users` docs, and orphaned `users` docs
-// whose Auth user no longer exists (nobody can read those any more). Any
-// anonymous user who owns a non-draft site is skipped and reported.
+// Only touches two kinds of Auth user: the legacy anonymous ones (no sign-in
+// provider, no email) and the QA sign-ups the suites create now that building is
+// account-first — qa-…@example.com, a domain RFC 2606 reserves so no customer can
+// ever hold one. Plus their `sites` docs that are still drafts, their `users`
+// docs, and orphaned `users` docs whose Auth user no longer exists (nobody can
+// read those any more). Anyone who owns a non-draft site is skipped and reported.
 import { execSync } from "node:child_process";
 
 const PROJECT = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "webbi-85f26";
@@ -46,23 +48,28 @@ async function listUsers() {
   }
 }
 
+/** The addresses the QA suites sign up with; `example.com` is reserved, never a customer. */
+const QA_EMAIL = /^qa-[^@]*@example\.com$/i;
+
 const users = await listUsers();
 const anonymous = users.filter((u) => (u.providerUserInfo ?? []).length === 0 && !u.email && !u.phoneNumber);
-const anonIds = new Set(anonymous.map((u) => u.localId));
+const qa = users.filter((u) => QA_EMAIL.test(u.email ?? ""));
+const throwaway = [...anonymous, ...qa];
+const throwawayIds = new Set(throwaway.map((u) => u.localId));
 const sites = await listCollection("sites");
 const userDocs = await listCollection("users");
 
 // Never delete a user who owns something that is not a draft.
-const keep = new Set(sites.filter((s) => anonIds.has(s.fields.ownerUid?.stringValue) && s.fields.status?.stringValue !== "draft").map((s) => s.fields.ownerUid.stringValue));
-const usersToDelete = anonymous.filter((u) => !keep.has(u.localId));
+const keep = new Set(sites.filter((s) => throwawayIds.has(s.fields.ownerUid?.stringValue) && s.fields.status?.stringValue !== "draft").map((s) => s.fields.ownerUid.stringValue));
+const usersToDelete = throwaway.filter((u) => !keep.has(u.localId));
 const deleteIds = new Set(usersToDelete.map((u) => u.localId));
 const sitesToDelete = sites.filter((s) => deleteIds.has(s.fields.ownerUid?.stringValue) && s.fields.status?.stringValue === "draft");
 const existingIds = new Set(users.map((u) => u.localId));
 const userDocsToDelete = userDocs.filter((d) => deleteIds.has(d.id) || !existingIds.has(d.id));
 
-console.log(`Auth users: ${users.length} total, ${anonymous.length} anonymous, ${keep.size} anonymous owner(s) of non-draft sites kept`);
+console.log(`Auth users: ${users.length} total, ${anonymous.length} anonymous, ${qa.length} qa-…@example.com, ${keep.size} owner(s) of non-draft sites kept`);
 for (const uid of keep) console.log(`  keep ${uid} (owns a non-draft site)`);
-console.log(`Would delete: ${usersToDelete.length} anonymous user(s), ${sitesToDelete.length} draft site doc(s), ${userDocsToDelete.length} users doc(s)`);
+console.log(`Would delete: ${usersToDelete.length} throwaway user(s), ${sitesToDelete.length} draft site doc(s), ${userDocsToDelete.length} users doc(s)`);
 for (const s of sitesToDelete) console.log(`  sites/${s.id} owner=${s.fields.ownerUid.stringValue} "${(s.fields.sourceDescription?.stringValue ?? "").slice(0, 40)}"`);
 for (const d of userDocsToDelete) console.log(`  users/${d.id}${existingIds.has(d.id) ? "" : " (orphan: no Auth user)"}`);
 
