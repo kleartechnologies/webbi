@@ -7,6 +7,9 @@ import { POST as confirm } from "@/app/api/publish/confirm/route";
 import { POST as republish } from "@/app/api/publish/republish/route";
 import { requireUser, type VerifiedUser } from "@/lib/auth/verify";
 import { DEMO_SITES } from "@/lib/site/demo";
+import { deleteDraftSite } from "@/lib/site/drafts";
+import { MODERATION_REASON_MAX, SUSPENDED_MESSAGE, suspendSite, unsuspendSite } from "@/lib/site/moderation";
+import { attentionMessage, retryPaymentFulfilment } from "@/lib/site/publish";
 import { FakeFirestore } from "@/test/fakeFirestore";
 
 /**
@@ -162,7 +165,7 @@ function returnQuery(bill: Doc, key = SIGNING_KEY): URLSearchParams {
 }
 
 async function call(handler: Handler, path: string, init: RequestInit) {
-  const response = await handler(new Request(`https://webbi.my${path}`, { method: "POST", ...init }));
+  const response = await handler(new Request(`https://webbi.online${path}`, { method: "POST", ...init }));
   return { status: response.status, body: (await response.json()) as Doc };
 }
 
@@ -246,8 +249,8 @@ describe("checkout: the bill is created on the server", () => {
       amount: "14990",
       email: owner.email,
       name: "Aisyah",
-      callback_url: "https://webbi.my/api/payments/webhook",
-      redirect_url: "https://webbi.my/s/site-a/publish/return",
+      callback_url: "https://webbi.online/api/payments/webhook",
+      redirect_url: "https://webbi.online/s/site-a/publish/return",
       reference_1: paymentId,
       reference_2: "site-a",
     });
@@ -578,5 +581,164 @@ describe("publishing gate", () => {
       body: { status: "published", slug: "kedai-aisyah-a" },
     });
     expect((await send(person(), republish, "/api/publish/republish", { siteId: "site-a" })).status).toBe(404);
+  });
+});
+
+describe("Phase F: a suspended website stays down", () => {
+  const REASON = "Phishing page reported by a bank";
+  const POSTS = () => billplz.requests.filter((request) => request.method === "POST").length;
+  const checkoutAs = (user: VerifiedUser, siteId = "site-a", slug = "kedai-aisyah-a") =>
+    send(user, checkout, "/api/publish/checkout", { siteId, slug });
+
+  it("refuses checkout for a suspended draft without opening a bill, and leaves other websites alone", async () => {
+    const owner = person();
+    const neighbour = person();
+    seedSite("site-a", owner.uid);
+    seedSite("site-b", neighbour.uid);
+    await suspendSite("site-a", REASON);
+
+    const res = await checkoutAs(owner);
+    expect(res).toEqual({ status: 403, body: { error: { code: "forbidden", message: SUSPENDED_MESSAGE } } });
+    expect(JSON.stringify(res.body)).not.toContain(REASON);
+    expect(POSTS()).toBe(0);
+    expect(db.ids("payments")).toEqual([]);
+
+    // An ordinary unpaid draft still checks out.
+    await openBill(neighbour, "site-b", "kedai-b");
+    expect(POSTS()).toBe(1);
+  });
+
+  it("keeps a bill paid after the suspension as paid, and the callback publishes nothing however often it comes", async () => {
+    const owner = person();
+    seedSite("site-a", owner.uid);
+    db.seed(`userQuotas/${owner.uid}`, { openDraftSiteId: "site-a" });
+    const a = await openBill(owner, "site-a", "kedai-aisyah-a");
+    await suspendSite("site-a", REASON);
+    billplz.pay(a.billId);
+
+    for (let i = 0; i < 3; i++) {
+      const res = await postCallback(callbackBody(a.bill));
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ received: true, published: false });
+      expect(JSON.stringify(res.body)).not.toContain(REASON);
+    }
+    expect(payment(a.paymentId)).toMatchObject({
+      status: "paid",
+      failureReason: null,
+      needsAttention: true,
+      attentionReason: "site_suspended",
+    });
+    expect(site("site-a")).toMatchObject({ status: "draft", paid: false, slug: null, moderationStatus: "suspended" });
+    expect(db.ids("publicSites")).toEqual([]);
+    expect(db.ids("slugs")).toEqual([]);
+    expect(db.read(`userQuotas/${owner.uid}`)?.openDraftSiteId).toBe("site-a");
+    expect(vi.mocked(revalidateTag)).not.toHaveBeenCalled();
+  });
+
+  it("doesn't publish through the signed return page either", async () => {
+    const owner = person();
+    seedSite("site-a", owner.uid);
+    const a = await openBill(owner, "site-a", "kedai-aisyah-a");
+    await suspendSite("site-a", REASON);
+    billplz.pay(a.billId);
+
+    const res = await confirmAs(owner, { siteId: "site-a", sessionId: a.billId, redirectQuery: returnQuery(a.bill).toString() });
+    expect(res).toEqual({ status: 409, body: { error: { code: "conflict", message: attentionMessage("site_suspended") } } });
+    expect(payment(a.paymentId)).toMatchObject({ status: "paid", needsAttention: true, attentionReason: "site_suspended" });
+    expect(site("site-a")).toMatchObject({ status: "draft", paid: false });
+    expect(db.ids("publicSites")).toEqual([]);
+  });
+
+  it("won't publish on a retry or a second Pay while suspended, and publishes the same payment once restored", async () => {
+    const owner = person();
+    seedSite("site-a", owner.uid);
+    const a = await openBill(owner, "site-a", "kedai-aisyah-a");
+    await suspendSite("site-a", REASON);
+    billplz.pay(a.billId);
+    await postCallback(callbackBody(a.bill));
+
+    expect(await retryPaymentFulfilment(a.paymentId)).toMatchObject({ published: false, needsAttention: "site_suspended" });
+    expect((await checkoutAs(owner)).status).toBe(403);
+    expect(db.ids("publicSites")).toEqual([]);
+
+    expect(await unsuspendSite("site-a")).toMatchObject({ moderationStatus: "active", changed: true, slugs: [] });
+    expect(await checkoutAs(owner)).toEqual({ status: 200, body: { url: "/s/site-a/live" } });
+    // One bill, one charge: the held payment is the one that publishes.
+    expect(POSTS()).toBe(1);
+    expect(db.ids("payments")).toEqual([a.paymentId]);
+    expect(site("site-a")).toMatchObject({ status: "published", paid: true, slug: "kedai-aisyah-a", paymentId: a.paymentId });
+    expect(payment(a.paymentId)).toMatchObject({ status: "paid", needsAttention: false, attentionReason: null });
+  });
+
+  it("takes a live website down, keeps it paid and owned, refuses every way back, and restores the same copy", async () => {
+    const owner = person();
+    seedSite("site-a", owner.uid);
+    const a = await openBill(owner, "site-a", "kedai-aisyah-a");
+    billplz.pay(a.billId);
+    await postCallback(callbackBody(a.bill));
+    const live = db.read("publicSites/kedai-aisyah-a");
+    expect(live).toMatchObject({ siteId: "site-a", content: site("site-a").published });
+    // A copy left under an older link is taken down too.
+    db.seed("publicSites/old-link", { siteId: "site-a", slug: "old-link", content: live?.content });
+    vi.mocked(revalidateTag).mockClear();
+
+    const result = await suspendSite("site-a", REASON);
+    expect(result).toMatchObject({ moderationStatus: "suspended", changed: true });
+    expect([...result.slugs].sort()).toEqual(["kedai-aisyah-a", "old-link"]);
+    for (const slug of ["kedai-aisyah-a", "old-link"]) {
+      const marker = db.read(`publicSites/${slug}`) ?? {};
+      expect(Object.keys(marker).sort()).toEqual(["slug", "suspended", "updatedAt"]);
+      expect(marker).toMatchObject({ slug, suspended: true });
+      for (const secret of [REASON, "site-a", owner.uid, a.paymentId, a.billId]) expect(JSON.stringify(marker)).not.toContain(secret);
+      expect(vi.mocked(revalidateTag)).toHaveBeenCalledWith(`site:${slug}`, { expire: 0 });
+    }
+    expect(db.read("siteModeration/site-a")).toMatchObject({ siteId: "site-a", moderationStatus: "suspended", moderationReason: REASON });
+    expect(site("site-a")).toMatchObject({
+      ownerUid: owner.uid,
+      status: "published",
+      paid: true,
+      slug: "kedai-aisyah-a",
+      paymentId: a.paymentId,
+      moderationStatus: "suspended",
+    });
+    expect(db.read("slugs/kedai-aisyah-a")).toMatchObject({ siteId: "site-a", ownerUid: owner.uid });
+    const marker = db.read("publicSites/kedai-aisyah-a");
+
+    // Publish changes, a replayed callback, the return page and Pay again all leave it down.
+    const republished = await send(owner, republish, "/api/publish/republish", { siteId: "site-a" });
+    expect(republished).toEqual({ status: 403, body: { error: { code: "forbidden", message: SUSPENDED_MESSAGE } } });
+    expect((await postCallback(callbackBody(a.bill))).status).toBe(200);
+    await confirmAs(owner, { siteId: "site-a", sessionId: a.billId, redirectQuery: returnQuery(a.bill).toString() });
+    expect((await checkoutAs(owner)).status).toBe(403);
+    expect(await retryPaymentFulfilment(a.paymentId)).toMatchObject({ published: false });
+    expect(db.read("publicSites/kedai-aisyah-a")).toEqual(marker);
+    expect(payment(a.paymentId)).toMatchObject({ status: "paid" });
+    expect(POSTS()).toBe(1);
+
+    expect(await unsuspendSite("site-a")).toMatchObject({ moderationStatus: "active", changed: true, slugs: ["kedai-aisyah-a"] });
+    expect(db.read("publicSites/kedai-aisyah-a")).toMatchObject({ siteId: "site-a", slug: "kedai-aisyah-a", content: live?.content });
+    expect(db.read("siteModeration/site-a")).toMatchObject({ moderationStatus: "active", moderationReason: null });
+    expect(site("site-a")).toMatchObject({ ownerUid: owner.uid, paid: true, moderationStatus: "active" });
+    expect((await send(owner, republish, "/api/publish/republish", { siteId: "site-a" })).status).toBe(200);
+  });
+
+  it("needs a real website and a short one-line reason, is idempotent, and keeps a suspended draft from being deleted", async () => {
+    await expect(suspendSite("no-such-site", REASON)).rejects.toMatchObject({ code: "not_found" });
+    await expect(suspendSite("../sites/x", REASON)).rejects.toMatchObject({ code: "bad_request" });
+    const owner = person();
+    seedSite("site-a", owner.uid);
+    for (const bad of ["", "   ", "x".repeat(MODERATION_REASON_MAX + 1), "line one\nline two", "tab\there", "a b"]) {
+      await expect(suspendSite("site-a", bad)).rejects.toMatchObject({ code: "bad_request" });
+    }
+    expect(site("site-a").moderationStatus).toBeUndefined();
+    expect(await unsuspendSite("site-a")).toMatchObject({ moderationStatus: "active", changed: false });
+    expect(db.read("siteModeration/site-a")).toBeUndefined();
+
+    expect(await suspendSite("site-a", "x".repeat(MODERATION_REASON_MAX))).toMatchObject({ changed: true });
+    expect(await suspendSite("site-a", "  second report  ")).toMatchObject({ changed: false });
+    expect(db.read("siteModeration/site-a")?.moderationReason).toBe("second report");
+
+    await expect(deleteDraftSite(owner.uid, "site-a")).rejects.toMatchObject({ code: "forbidden" });
+    expect(site("site-a")).toMatchObject({ ownerUid: owner.uid, status: "draft" });
   });
 });

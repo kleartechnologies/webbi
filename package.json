@@ -16,7 +16,8 @@
     "qa:profile-location": "node scripts/qa/profile-location.mjs",
     "qa:hero-shapes": "node scripts/qa/hero-shapes.mjs",
     "qa:headers": "node scripts/qa/security-headers.mjs",
-    "qa:cleanup": "node scripts/qa/cleanup-anonymous.mjs"
+    "qa:cleanup": "node scripts/qa/cleanup-anonymous.mjs",
+    "ops:moderate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops/moderate.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

@@ -26,7 +26,7 @@ describe("safeNext", () => {
     }
   });
 
-  const ORIGIN = "https://webbi-my.netlify.app";
+  const ORIGIN = "https://webbi.online";
 
   it("accepts a relative destination and an absolute one on Webbi's own origin", () => {
     expect(safeNext("/dashboard", ORIGIN)).toBe("/dashboard");
@@ -39,7 +39,7 @@ describe("safeNext", () => {
       "https://evil.example",
       "http://evil.example/dashboard",
       `${ORIGIN}.evil.example/dashboard`,
-      "http://webbi-my.netlify.app/dashboard",
+      "http://webbi.online/dashboard",
       "javascript:alert(1)",
       "JavaScript:alert(document.cookie)",
       " javascript:alert(1)",
@@ -78,7 +78,7 @@ describe("authPath", () => {
   });
 
   it("round-trips: what authPath writes, safeNext and authMode read back", () => {
-    const url = new URL(authPath("/start", "create"), "https://webbi.my");
+    const url = new URL(authPath("/start", "create"), "https://webbi.online");
     expect(safeNext(url.searchParams.get("next"))).toBe("/start");
     expect(authMode(url.searchParams.get("mode"))).toBe("create");
   });

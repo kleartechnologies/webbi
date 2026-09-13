@@ -1,4 +1,4 @@
-const ITEMS = ["One description in, one website out", "English & Bahasa Melayu", "WhatsApp as your front door", "Published on webbi.my"];
+const ITEMS = ["One description in, one website out", "English & Bahasa Melayu", "WhatsApp as your front door", "Published on webbi.online"];
 
 export function CapabilityStrip() {
   return (

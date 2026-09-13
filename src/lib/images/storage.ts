@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import type { VerifiedUser } from "@/lib/auth/verify";
 import { adminDb, adminStorage } from "@/lib/firebase/admin";
 import { quotaDay, SITE_ID } from "@/lib/site/drafts";
+import { isSuspended } from "@/lib/site/moderationCore";
 import { PublishError } from "@/lib/site/publish";
 import type { SiteDoc, UserQuotaDoc } from "@/lib/site/types";
 import { isUploadType, MAX_UPLOAD_BYTES, TOO_LARGE_MESSAGE, UNSUPPORTED_MESSAGE, UPLOAD_EXTENSIONS } from "./limits";
@@ -73,8 +74,8 @@ export function downloadUrl(bucket: string, path: string, token: string): string
 function assertUploadable(site: SiteDoc | null, uid: string): void {
   if (!site) throw new PublishError("not_found", "We couldn't find that website.");
   if (site.ownerUid !== uid) throw new PublishError("forbidden", "You can only add photos to your own website.");
-  // Drafts, and live websites (the editor changes them before a republish).
-  const uploadable = site.status === "draft" || (site.status === "published" && site.paid === true);
+  // Drafts, and live websites (the editor changes them before a republish). Never a suspended one.
+  const uploadable = !isSuspended(site) && (site.status === "draft" || (site.status === "published" && site.paid === true));
   if (!uploadable) throw new PublishError("forbidden", "Photos can't be added to this website.");
 }
 

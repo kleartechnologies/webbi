@@ -11,7 +11,7 @@ export default defineConfig({
       NEXT_PUBLIC_FIREBASE_PROJECT_ID: "test",
       NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "test.appspot.com",
       NEXT_PUBLIC_FIREBASE_APP_ID: "1:1:web:test",
-      NEXT_PUBLIC_SITE_URL: "https://webbi.my",
+      NEXT_PUBLIC_SITE_URL: "https://webbi.online",
     },
   },
   resolve: {

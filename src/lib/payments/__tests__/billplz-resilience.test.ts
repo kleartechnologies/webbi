@@ -169,7 +169,7 @@ function returnQuery(bill: Doc, key = SIGNING_KEY): string {
 }
 
 async function call(handler: Handler, path: string, init: RequestInit) {
-  const response = await handler(new Request(`https://webbi.my${path}`, { method: "POST", ...init }));
+  const response = await handler(new Request(`https://webbi.online${path}`, { method: "POST", ...init }));
   return { status: response.status, body: (await response.json()) as Doc };
 }
 

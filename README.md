@@ -1,6 +1,6 @@
 # Webbi
 
-AI website generator for Malaysian small businesses. Describe your business in one sentence (BM or English), preview the finished website free, pay RM149.90 once to publish it at `webbi.my/w/your-business`.
+AI website generator for Malaysian small businesses. Describe your business in one sentence (BM or English), preview the finished website free, pay RM149.90 once to publish it at `webbi.online/w/your-business`.
 
 One shared Next.js app renders every customer site from structured data. No per-customer HTML is generated.
 
@@ -84,10 +84,11 @@ Firestore collections (rules in `firestore.rules`):
 | Collection | Who can read / write | Contents |
 | --- | --- | --- |
 | `users/{uid}` | owner | profile |
-| `sites/{siteId}` | owner reads; owner may update only `draft`, `sourceDescription`, `generation`, `language`, `updatedAt`; create and delete are server-only (`/api/sites`) | draft content, flow status, `slug`/`paid`/`published` (server-only) |
+| `sites/{siteId}` | owner reads; owner may update only `draft`, `sourceDescription`, `generation`, `language`, `updatedAt`, and not at all while suspended; create and delete are server-only (`/api/sites`) | draft content, flow status, `slug`/`paid`/`published`/`moderationStatus` (server-only) |
+| `siteModeration/{siteId}` | server-only | why a website was suspended (see Moderation) |
 | `userQuotas/{uid}` | server-only | `openDraftSiteId` (the account's one unpublished website), `draftsCreatedToday` / `draftsDay` (Malaysia calendar day), AI requests `aiRequestsToday` / `aiDay` and `aiRequestsThisMonth` / `aiMonth`, and photo uploads `uploadsToday` / `uploadsDay` |
 | `siteAi/{siteId}` | server-only | one small document per website: `understandings`, `generations` and the AI `lock`; deleted with the draft |
-| `publicSites/{slug}` | world-readable, server-only writes | the published copy of a site, plus `siteId` (never the owner) |
+| `publicSites/{slug}` | anyone can get one by its link, nobody can list; server-only writes | the published copy of a site, plus `siteId` (never the owner); a content-free marker while suspended |
 | `slugs/{slug}` | server-only | slug → siteId reservation, claimed inside the payment transaction |
 | `payments/{id}` | owner reads, server-only writes | one record per checkout: provider, amount, status |
 
@@ -220,7 +221,7 @@ Deploy `storage.rules` together with the app code that adds `/api/sites/images`:
 
 ## Deploying to Netlify
 
-The Netlify site is `webbi-my` (https://webbi-my.netlify.app). It is **not** linked to the GitHub repo, so deploys are manual:
+Production is **https://webbi.online** (the Netlify primary domain; `www.webbi.online` redirects to it). The Netlify project is `webbi-my`, and https://webbi-my.netlify.app is its fallback project domain. Keep that address working: bills opened before a domain change call back to it. The site is linked to the GitHub repo, so every push to `main` deploys. A manual deploy is still possible:
 
 ```bash
 npx netlify login            # once
@@ -232,13 +233,49 @@ Environment variables to set under Site configuration → Environment variables 
 
 ### Before launch
 
-1. Firebase Console → Authentication → Sign-in method: enable **Anonymous**, **Google**, **Email/Password**; Settings → Authorized domains: add the Netlify domain (and the custom domain later).
+1. Firebase Console → Authentication → Sign-in method: enable **Anonymous**, **Google**, **Email/Password**; Settings → Authorized domains: `webbi.online` and `www.webbi.online` (already added) and the Netlify domain.
 2. Firebase Console → Project settings → Service accounts → generate a key → `FIREBASE_SERVICE_ACCOUNT_BASE64` on Netlify (set as a **secret**, which Netlify only allows for the production / deploy-preview / branch-deploy contexts). Already set. Without it every `/api/*` route answers 503 `admin_not_configured` (the details go to the function log, not the response).
 3. `OPENAI_API_KEY` on Netlify (`AI_PROVIDER` unset or `openai`). Already set.
 4. Payments: Billplz, production API. The four `BILLPLZ_*` variables are set on Netlify, and with `PAYMENT_PROVIDER` unset they switch payments on. X Signature must be on in the Billplz account (see Payments). `PAYMENT_PROVIDER=none` is the off switch; `mock` is refused in production builds.
 5. `firebase deploy --only firestore:rules,firestore:indexes,storage --project webbi-85f26` (already deployed once; re-run after changing rules).
 6. Netlify → Site configuration → Site protection: turn off team-only access so customers' sites are public.
-7. `NEXT_PUBLIC_SITE_URL` must match the domain customers will see in their share links.
+7. `NEXT_PUBLIC_SITE_URL=https://webbi.online` in the production context: it is the domain in share links and in each new bill's callback and return URLs. It is inlined at build time, so redeploy after changing it.
+
+## Moderation and takedown
+
+A website that breaks the rules can be taken down in seconds and can't be brought back by its owner. Webbi does this by hand; there is no admin page and no public endpoint.
+
+State (`src/lib/site/moderationCore.ts`):
+
+- `sites/{siteId}.moderationStatus` is `"active"` or `"suspended"` (missing = active), with `moderatedAt`. Only the server writes it; the rules refuse any browser change, and refuse every browser edit to a suspended site.
+- `siteModeration/{siteId}` keeps the internal `moderationReason` (one line, at most 500 characters). No browser can read it, the owner included. Don't put personal data or secrets in it.
+- While suspended, `publicSites/{slug}` is replaced by `{ slug, suspended: true }`: no content, no site id. Every `publicSites` copy that names the site is replaced, not only its current link.
+
+Suspend or restore (dry run first; needs Node 22.18+ for its TypeScript import and credentials for the project: `gcloud auth application-default login`, or `FIREBASE_SERVICE_ACCOUNT_BASE64` in the environment):
+
+```bash
+npm run ops:moderate -- status <siteId>
+npm run ops:moderate -- suspend <siteId> "Phishing page reported 2026-09-13" --apply
+npm run ops:moderate -- unsuspend <siteId> --apply
+```
+
+It runs against `NEXT_PUBLIC_FIREBASE_PROJECT_ID` (default `webbi-85f26`) and prints the project before writing. From server code, `suspendSite` / `unsuspendSite` in `src/lib/site/moderation.ts` do the same and also clear the page cache.
+
+What a suspension does:
+
+- **Public URL.** `/w/{slug}` shows only "This website is currently unavailable." (`noindex`): no reason, owner, payment or ids. The script can't clear Next's cache, so the old page may be served for up to 60 seconds.
+- **Publishing.** Refused everywhere, checked on the server immediately before anything is written: checkout (no bill is opened), the Billplz callback, the return page, reuse of an open bill, retry of a paid payment, and Publish changes. AI requests, photo uploads and deleting the draft are refused too; the draft stays for review, and it keeps the account's one-draft slot.
+- **Payments.** Nothing is refunded or marked failed. A payment confirmed for a suspended draft stays `paid` with `needsAttention: true` and `attentionReason: "site_suspended"`, and the owner sees "can't go live right now, contact support". Refund it by hand in Billplz if the site stays down.
+- **Data and images.** Nothing is deleted: the draft, the published copy on the site document, the payment records, the photos in Storage and the claimed link all stay, so nobody else can take the link. Storage photos keep their private token URLs.
+
+Restoring puts a paid, published site's last published copy back on its link (within a minute of the cache). A payment held as `site_suspended` publishes when retried: the owner presses Pay again (no second charge), or run `retryPaymentFulfilment(paymentId)` on the server.
+
+Abuse reports: there is no report form. Reports go to Webbi support. Check the page, suspend first if it is phishing, malware, fraud or illegal content, note the reason, and review later with the owner. Keep the report outside the repository.
+
+Not done, and why:
+
+- **Email verification before publishing.** Not required. Google accounts are already verified, and publishing needs a real Billplz payment by a named payer, which is a stronger check than a confirmation link and doesn't break the one-screen payment flow.
+- **Link enumeration.** Browsers can no longer list `publicSites`. A guessed link still opens its page, as any public website does.
 
 ## Design
 

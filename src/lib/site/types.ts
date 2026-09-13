@@ -32,6 +32,13 @@ export interface SiteDoc {
   publishedAt: Timestamp | null;
   /** The payment that published this site. Missing on sites published before it was recorded. */
   paymentId?: string | null;
+  /**
+   * Set only by the server (moderationCore.ts); missing means active. A suspended
+   * site's public page is unavailable and nothing can publish it. The reason is
+   * kept apart, in siteModeration/{siteId}, which no browser can read.
+   */
+  moderationStatus?: "active" | "suspended";
+  moderatedAt?: Timestamp | null;
   draft: SiteContent | null;
   sourceDescription: string;
   generation: GenerationState;
@@ -106,6 +113,27 @@ export interface PublicSiteDoc {
   updatedAt: Timestamp;
 }
 
+/**
+ * What publicSites/{slug} holds while its website is suspended: no content, no
+ * site id, no reason. The public page shows a generic "unavailable" notice.
+ */
+export interface SuspendedPublicSiteDoc {
+  slug: string;
+  suspended: true;
+  updatedAt: Timestamp;
+}
+
+/** Firestore document at siteModeration/{siteId}. Server only: no browser can read or write it. */
+export interface SiteModerationDoc {
+  siteId: string;
+  moderationStatus: "active" | "suspended";
+  /** Internal note, at most MODERATION_REASON_MAX characters. Cleared when the site is restored. */
+  moderationReason: string | null;
+  suspendedAt?: Timestamp;
+  restoredAt?: Timestamp;
+  updatedAt: Timestamp;
+}
+
 /** Firestore document at slugs/{slug}: who owns a link. Server only. */
 export interface SlugDoc {
   siteId: string;
@@ -121,8 +149,10 @@ export type PaymentStatus = "pending" | "paid" | "failed";
  *  - fulfilment_pending: recorded paid, publishing hasn't finished (normally for milliseconds)
  *  - invalid_draft / slug_unavailable / fulfilment_error: publishing failed; retryable
  *  - site_missing / owner_mismatch / amount_mismatch / duplicate: never publishes; refund by hand
+ *  - site_suspended: the website was taken down by Webbi; publishes only if it is restored and retried
  */
 export type PaymentAttentionReason =
+  | "site_suspended"
   | "fulfilment_pending"
   | "invalid_draft"
   | "slug_unavailable"

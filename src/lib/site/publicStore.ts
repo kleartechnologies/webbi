@@ -18,6 +18,11 @@ const publicSiteSchema = z.object({
 });
 export type PublicSite = z.infer<typeof publicSiteSchema>;
 
+/** A link whose website Webbi has taken down. Carries nothing else on purpose. */
+export interface SuspendedPublicSite {
+  suspended: true;
+}
+
 export function siteCacheTag(slug: string): string {
   return `site:${slug}`;
 }
@@ -56,15 +61,18 @@ function decodeFields(fields: Record<string, FirestoreValue>): Record<string, un
   return out;
 }
 
-/** The live site for a slug, or null when nothing is published there. */
-export async function getPublicSite(slug: string): Promise<PublicSite | null> {
+/** The live site for a slug, a suspension marker, or null when nothing is published there. */
+export async function getPublicSite(slug: string): Promise<PublicSite | SuspendedPublicSite | null> {
   const { projectId, apiKey } = publicEnv.firebase;
   const url = `${firestoreBase()}/projects/${projectId}/databases/(default)/documents/publicSites/${encodeURIComponent(slug)}?key=${apiKey}`;
   const res = await fetch(url, { next: { revalidate: 60, tags: [siteCacheTag(slug)] } });
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Could not load site "${slug}" (Firestore ${res.status})`);
   const doc = (await res.json()) as { fields?: Record<string, FirestoreValue> };
-  const parsed = publicSiteSchema.safeParse(decodeFields(doc.fields ?? {}));
+  const fields = decodeFields(doc.fields ?? {});
+  // Checked before anything else: a suspended link never renders content, whatever else the document holds.
+  if (fields.suspended !== undefined && fields.suspended !== false) return { suspended: true };
+  const parsed = publicSiteSchema.safeParse(fields);
   if (!parsed.success) {
     console.error(`publicSites/${slug} failed validation`, parsed.error.issues.slice(0, 3));
     return null;

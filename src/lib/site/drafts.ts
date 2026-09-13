@@ -1,6 +1,7 @@
 import "server-only";
 import { FieldValue, type Transaction } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
+import { isSuspended, SUSPENDED_MESSAGE } from "./moderationCore";
 import { PublishError } from "./publish";
 import type { Understanding } from "./schema";
 import type { PaymentDoc, SiteDoc, UserQuotaDoc } from "./types";
@@ -168,6 +169,8 @@ export async function deleteDraftSite(uid: string, siteId: string): Promise<void
     const [siteSnap, quotaSnap] = await tx.getAll(siteRef, quotaRef);
     const site = siteSnap.exists ? (siteSnap.data() as SiteDoc) : null;
     if (!site || site.ownerUid !== uid) throw new PublishError("not_found", "We couldn't find that website.");
+    // Kept for review, and so a new website can't be started in its place.
+    if (isSuspended(site)) throw new PublishError("forbidden", SUSPENDED_MESSAGE);
     if (site.status !== "draft" || site.paid) {
       throw new PublishError("conflict", "This Webbi is paid for, so it can't be deleted.");
     }

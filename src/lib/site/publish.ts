@@ -9,6 +9,7 @@ import {
   type PaymentProviderName,
   type PaymentVerification,
 } from "@/lib/payments/provider";
+import { isSuspended, SUSPENDED_MESSAGE } from "./moderationCore";
 import { siteCacheTag } from "./publicStore";
 import { siteContentSchema, type SiteContent } from "./schema";
 import { isReservedSlug, isValidSlug } from "./slug";
@@ -208,6 +209,8 @@ export function attentionMessage(reason: PaymentAttentionReason | undefined): st
       return "We've received your payment, but some details on your website need fixing before it can go live. Open the editor to check them, then publish again. You won't be charged twice.";
     case "slug_unavailable":
       return "We've received your payment, but that link was just taken. Choose a different one and publish again. You won't be charged twice.";
+    case "site_suspended":
+      return "We've received your payment, but this website can't go live right now. Please contact Webbi support.";
     default:
       return "We've received your payment, but your website couldn't go live yet. Please contact Webbi support and we'll sort it out.";
   }
@@ -348,6 +351,9 @@ async function publishPaidPayment(paymentId: string, requestedSlug?: string): Pr
         }
         return base;
       }
+
+      // Taken down by Webbi: the money stays recorded as paid, nothing goes live.
+      if (isSuspended(site)) return hold("site_suspended");
 
       publishing = true;
       const content = publishableContent(site.draft);
@@ -576,6 +582,7 @@ export async function republishSite(siteId: string, uid: string): Promise<{ slug
     const snap = await tx.get(siteRef);
     const site = snap.exists ? (snap.data() as SiteDoc) : null;
     if (!site || site.ownerUid !== uid) throw new PublishError("not_found", "We couldn't find that website.");
+    if (isSuspended(site)) throw new PublishError("forbidden", SUSPENDED_MESSAGE);
     if (site.status !== "published" || !site.paid || !site.slug) {
       throw new PublishError("conflict", "This website isn't live yet. Publish it first.");
     }

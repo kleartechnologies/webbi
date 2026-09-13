@@ -71,8 +71,8 @@ describe("hasUnpublishedChanges", () => {
 
 describe("urls", () => {
   it("builds public URLs from NEXT_PUBLIC_SITE_URL", () => {
-    expect(siteHost()).toBe("webbi.my");
-    expect(publicSiteUrl("hafiz-proton")).toBe("https://webbi.my/w/hafiz-proton");
+    expect(siteHost()).toBe("webbi.online");
+    expect(publicSiteUrl("hafiz-proton")).toBe("https://webbi.online/w/hafiz-proton");
     // No query string: each payment adapter appends its own (Stripe's session_id, Billplz's signed billplz[…]).
     expect(checkoutReturnPath("site1")).toBe("/s/site1/publish/return");
     expect(PAYMENT_CALLBACK_PATH).toBe("/api/payments/webhook");

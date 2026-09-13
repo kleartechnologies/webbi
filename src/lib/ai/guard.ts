@@ -5,6 +5,7 @@ import { getAiProvider, type AiProvider } from "@/lib/ai";
 import { requireUser, type VerifiedUser } from "@/lib/auth/verify";
 import { adminDb } from "@/lib/firebase/admin";
 import { quotaDay, SITE_ID } from "@/lib/site/drafts";
+import { isSuspended, SUSPENDED_MESSAGE } from "@/lib/site/moderationCore";
 import { PublishError } from "@/lib/site/publish";
 import type { GenerationState, SiteAiDoc, SiteDoc, UserQuotaDoc } from "@/lib/site/types";
 import { AiError, AiQuotaError } from "./errors";
@@ -106,6 +107,7 @@ export async function runAiJob<Req, Res>(job: AiJob<Req, Res>): Promise<Res> {
     const site = siteSnap.exists ? (siteSnap.data() as SiteDoc) : null;
     if (!site) throw new PublishError("not_found", "We couldn't find that website.");
     if (site.ownerUid !== user.uid) throw new PublishError("forbidden", "This website belongs to another account.");
+    if (isSuspended(site)) throw new PublishError("forbidden", SUSPENDED_MESSAGE);
     if (site.status !== "draft") {
       throw new PublishError("forbidden", "Webbi's AI only works on websites that aren't published yet.");
     }

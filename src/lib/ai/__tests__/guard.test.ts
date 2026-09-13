@@ -72,7 +72,7 @@ async function send(user: VerifiedUser | null, handler: Handler, path: string, b
   if (user) vi.mocked(requireUser).mockResolvedValue(user);
   else vi.mocked(requireUser).mockRejectedValue(new UnauthorizedError());
   const response = await handler(
-    new Request(`https://webbi.my${path}`, {
+    new Request(`https://webbi.online${path}`, {
       method: "POST",
       headers: { authorization: "Bearer test-token", "content-type": "application/json" },
       body: typeof body === "string" ? body : JSON.stringify(body),
@@ -153,6 +153,19 @@ afterEach(() => {
 });
 
 describe("who can use the AI", () => {
+  it("refuses a website Webbi has suspended (403) and calls nothing", async () => {
+    const owner = person();
+    const siteId = seedDraft(owner.uid, { moderationStatus: "suspended" });
+    for (const call of [generate, understand]) {
+      const res = await call(owner, { siteId });
+      expect(res.status).toBe(403);
+      expect(res.body.error?.code).toBe("forbidden");
+    }
+    expect(provider.generate).not.toHaveBeenCalled();
+    expect(provider.understand).not.toHaveBeenCalled();
+    expectUntouched(owner.uid, siteId);
+  });
+
   it("lets the owner build their draft from what is saved on it, and saves the result on the server", async () => {
     const owner = person();
     const siteId = seedDraft(owner.uid);

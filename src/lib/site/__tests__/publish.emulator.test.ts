@@ -6,6 +6,7 @@ import {
   deleteDoc,
   doc,
   getDoc,
+  getDocs,
   getFirestore,
   setDoc,
   terminate,
@@ -33,8 +34,21 @@ const PROJECT = "demo-webbi";
 describe.runIf(Boolean(HOST))("Phase D on the Firestore emulator", () => {
   let admin: import("firebase-admin/firestore").Firestore;
   let retryPaymentFulfilment: typeof import("@/lib/site/publish").retryPaymentFulfilment;
+  let suspendSite: typeof import("@/lib/site/moderation").suspendSite;
+  let unsuspendSite: typeof import("@/lib/site/moderation").unsuspendSite;
   const apps: FirebaseApp[] = [];
   const clients: Firestore[] = [];
+
+  /** Someone who isn't signed in, like a visitor on a published page. */
+  function visitor(): Firestore {
+    const app = initializeApp({ projectId: PROJECT, apiKey: "fake-api-key" }, `visitor-${apps.length}`);
+    const db = getFirestore(app);
+    const [host, port] = String(HOST).split(":");
+    connectFirestoreEmulator(db, host, Number(port));
+    apps.push(app);
+    clients.push(db);
+    return db;
+  }
 
   function browser(uid: string): Firestore {
     const app = initializeApp({ projectId: PROJECT, apiKey: "fake-api-key" }, `${uid}-${apps.length}`);
@@ -70,6 +84,7 @@ describe.runIf(Boolean(HOST))("Phase D on the Firestore emulator", () => {
   beforeAll(async () => {
     admin = (await import("@/lib/firebase/admin")).adminDb();
     ({ retryPaymentFulfilment } = await import("@/lib/site/publish"));
+    ({ suspendSite, unsuspendSite } = await import("@/lib/site/moderation"));
   });
 
   beforeEach(async () => {
@@ -154,5 +169,83 @@ describe.runIf(Boolean(HOST))("Phase D on the Firestore emulator", () => {
     expect((await admin.doc("userQuotas/alice").get()).data()?.openDraftSiteId).toBeNull();
     // A pending payment is never published by a retry.
     await expect(retryPaymentFulfilment("pending-1")).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("keeps moderation server-only: the owner can't unsuspend, write or read the reason, or edit a suspended website", async () => {
+    const alice = browser("alice");
+    for (const change of [
+      { moderationStatus: "suspended" },
+      { moderationStatus: "active" },
+      { moderationReason: "nothing to see" },
+      { moderatedAt: new Date() },
+    ]) {
+      await denied(updateDoc(doc(alice, "sites", "alice-draft"), change));
+    }
+    // An ordinary draft edit still works on an active website.
+    await updateDoc(doc(alice, "sites", "alice-draft"), { sourceDescription: "Nasi lemak in Kajang", updatedAt: new Date() });
+
+    await suspendSite("alice-draft", "Reported for phishing");
+    await denied(updateDoc(doc(alice, "sites", "alice-draft"), { moderationStatus: "active" }));
+    await denied(setDoc(doc(alice, "sites", "alice-draft"), { moderationStatus: "active" }, { merge: true }));
+    await denied(updateDoc(doc(alice, "sites", "alice-draft"), { sourceDescription: "Something else now", updatedAt: new Date() }));
+    await denied(deleteDoc(doc(alice, "sites", "alice-draft")));
+    for (const reader of [alice, browser("bob"), visitor()]) {
+      await denied(getDoc(doc(reader, "siteModeration", "alice-draft")));
+    }
+    await denied(setDoc(doc(alice, "siteModeration", "alice-draft"), { moderationStatus: "active", moderationReason: null }));
+    await denied(getDoc(doc(visitor(), "sites", "alice-draft")));
+
+    expect((await getDoc(doc(alice, "sites", "alice-draft"))).data()).toMatchObject({ ownerUid: "alice", moderationStatus: "suspended" });
+    expect((await admin.doc("siteModeration/alice-draft").get()).data()).toMatchObject({ moderationReason: "Reported for phishing" });
+  });
+
+  it("lets anyone get a live page by its link but nobody list them; a suspended page holds no content", async () => {
+    const now = Timestamp.now();
+    const content = structuredClone(Object.values(DEMO_SITES)[0]);
+    await admin.doc("sites/alice-draft").update({ status: "published", paid: true, slug: "kedai-alice", published: content, publishedAt: now });
+    await admin.doc("slugs/kedai-alice").set({ siteId: "alice-draft", ownerUid: "alice", createdAt: now });
+    await admin.doc("publicSites/kedai-alice").set({ siteId: "alice-draft", slug: "kedai-alice", content, publishedAt: now, updatedAt: now });
+
+    const guest = visitor();
+    expect((await getDoc(doc(guest, "publicSites", "kedai-alice"))).data()).toMatchObject({ siteId: "alice-draft" });
+    await denied(getDocs(collection(guest, "publicSites")));
+    await denied(getDocs(collection(browser("alice"), "publicSites")));
+
+    await suspendSite("alice-draft", "Fraud");
+    const marker = (await getDoc(doc(guest, "publicSites", "kedai-alice"))).data() ?? {};
+    expect(Object.keys(marker).sort()).toEqual(["slug", "suspended", "updatedAt"]);
+    expect(marker).toMatchObject({ slug: "kedai-alice", suspended: true });
+    await denied(setDoc(doc(browser("alice"), "publicSites", "kedai-alice"), { siteId: "alice-draft", slug: "kedai-alice", content }));
+    await denied(deleteDoc(doc(browser("alice"), "publicSites", "kedai-alice")));
+
+    await unsuspendSite("alice-draft");
+    expect((await getDoc(doc(guest, "publicSites", "kedai-alice"))).data()).toMatchObject({ siteId: "alice-draft", content });
+  });
+
+  it("holds a paid payment for a suspended website with real transactions, publishing nothing", async () => {
+    await suspendSite("alice-draft", "Reported");
+    const now = Timestamp.now();
+    await admin.doc("payments/paid-1").set({
+      ...PAYMENT,
+      status: "paid",
+      paidAt: now,
+      paidAmountSen: 14990,
+      needsAttention: true,
+      attentionReason: "fulfilment_pending",
+      fulfilledAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const results = await Promise.all(Array.from({ length: 4 }, () => retryPaymentFulfilment("paid-1")));
+    expect(results.every((result) => !result.published && result.needsAttention === "site_suspended")).toBe(true);
+    expect((await admin.collection("publicSites").get()).size).toBe(0);
+    expect((await admin.collection("slugs").get()).size).toBe(0);
+    expect((await admin.doc("payments/paid-1").get()).data()).toMatchObject({
+      status: "paid",
+      needsAttention: true,
+      attentionReason: "site_suspended",
+    });
+    expect((await admin.doc("sites/alice-draft").get()).data()).toMatchObject({ status: "draft", paid: false, ownerUid: "alice" });
+    expect((await admin.doc("userQuotas/alice").get()).data()?.openDraftSiteId).toBe("alice-draft");
   });
 });

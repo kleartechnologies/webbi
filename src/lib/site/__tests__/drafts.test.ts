@@ -137,7 +137,7 @@ function callbackBody(bill: Doc): URLSearchParams {
 }
 
 async function call(handler: Handler, path: string, init: RequestInit) {
-  const response = await handler(new Request(`https://webbi.my${path}`, { method: "POST", ...init }));
+  const response = await handler(new Request(`https://webbi.online${path}`, { method: "POST", ...init }));
   return { status: response.status, body: (await response.json()) as Doc };
 }
 
@@ -651,7 +651,18 @@ describe("no way around the server", () => {
   }
 
   it("has no browser code that writes a site document directly (the old guest handoff included)", () => {
-    const client = walk("src").filter((file) => !file.startsWith("src/app/api/") && !read(file).includes('import "server-only"'));
+    // The moderation core has no "server-only" import only so the ops CLI can run
+    // it under Node. It takes an Admin SDK Firestore, never loads the browser SDK,
+    // and nothing but the server wrapper and the CLI imports it.
+    const CORE = "src/lib/site/moderationCore.ts";
+    expect(read(CORE)).not.toMatch(/from "firebase\/|from "@\/lib\/firebase\/client/);
+    expect(read(CORE)).toMatch(/import type \{[^}]*\} from "firebase-admin\/firestore"/);
+    const importers = walk("src").filter((file) => file !== CORE && /moderationCore["']/.test(read(file)));
+    for (const file of importers) expect(read(file), file).not.toMatch(/^["']use client["']/m);
+    expect(read("scripts/ops/moderate.mjs")).toContain("moderationCore.ts");
+    const client = walk("src").filter(
+      (file) => file !== CORE && !file.startsWith("src/app/api/") && !read(file).includes('import "server-only"'),
+    );
     const writers = client.filter((file) => /\b(addDoc|setDoc|deleteDoc|writeBatch|runTransaction)\s*\(/.test(read(file)));
     // Only the profile upsert (users/{uid}) writes with setDoc.
     expect(writers.map((file) => relative(ROOT, join(ROOT, file)))).toEqual(["src/lib/auth/actions.ts"]);

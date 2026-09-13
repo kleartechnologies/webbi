@@ -44,7 +44,7 @@ type RemoteCheck =
   | { slug: string; kind: "error"; message: string; code: string };
 
 const INCLUDED = [
-  "Live at your webbi.my link",
+  `Live at your ${siteHost()} link`,
   "Unlimited edits and republishing",
   "WhatsApp, call and enquiry buttons",
   "QR code for your shop and flyers",

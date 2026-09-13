@@ -23,7 +23,7 @@ function stripe(): Stripe {
   if (client) return client;
   const key = serverEnv.stripeSecretKey;
   if (!key) throw new PaymentError("payments_not_configured", "STRIPE_SECRET_KEY is not set.");
-  client = new Stripe(key, { appInfo: { name: "Webbi", url: "https://webbi.my" } });
+  client = new Stripe(key, { appInfo: { name: "Webbi", url: "https://webbi.online" } });
   return client;
 }
 

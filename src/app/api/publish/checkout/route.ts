@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/verify";
 import { PRICE_SEN, publicEnv } from "@/lib/env";
 import { getPaymentProvider } from "@/lib/payments";
 import { checkoutReturnPath, PAYMENT_CALLBACK_PATH, publicSiteUrl } from "@/lib/site/flow";
+import { isSuspended, SUSPENDED_MESSAGE } from "@/lib/site/moderationCore";
 import {
   attachProviderRef,
   attentionMessage,
@@ -57,6 +58,8 @@ export async function POST(request: Request) {
     const provider = getPaymentProvider();
 
     const site = await getOwnedSite(siteId, user.uid);
+    // Taken down by Webbi: no bill is opened and no paid payment is published.
+    if (isSuspended(site)) return apiError(403, "forbidden", SUSPENDED_MESSAGE);
     if (site.status === "published") {
       return apiError(409, "conflict", "This website is already live.");
     }

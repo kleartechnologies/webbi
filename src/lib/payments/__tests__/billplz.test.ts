@@ -88,12 +88,12 @@ const checkoutInput = (overrides: Partial<CheckoutInput> = {}): CheckoutInput =>
   email: "owner@example.com",
   customerName: "Aisyah",
   businessName: "Kedai Aisyah",
-  publicUrl: "https://webbi.my/w/kedai-aisyah",
+  publicUrl: "https://webbi.online/w/kedai-aisyah",
   amountSen: PRICE_SEN,
   currency: "myr",
-  successUrl: "https://webbi.my/s/site_abc/publish/return",
-  cancelUrl: "https://webbi.my/s/site_abc/publish?cancelled=1",
-  callbackUrl: "https://webbi.my/api/payments/webhook",
+  successUrl: "https://webbi.online/s/site_abc/publish/return",
+  cancelUrl: "https://webbi.online/s/site_abc/publish?cancelled=1",
+  callbackUrl: "https://webbi.online/api/payments/webhook",
   ...overrides,
 });
 
@@ -213,9 +213,9 @@ describe("createCheckout", () => {
       email: "owner@example.com",
       name: "Aisyah",
       amount: "14990",
-      description: "Webbi website for Kedai Aisyah. One-time payment for https://webbi.my/w/kedai-aisyah",
-      callback_url: "https://webbi.my/api/payments/webhook",
-      redirect_url: "https://webbi.my/s/site_abc/publish/return",
+      description: "Webbi website for Kedai Aisyah. One-time payment for https://webbi.online/w/kedai-aisyah",
+      callback_url: "https://webbi.online/api/payments/webhook",
+      redirect_url: "https://webbi.online/s/site_abc/publish/return",
       deliver: "false",
       reference_1_label: "Webbi payment",
       reference_1: "pay_123",
@@ -246,7 +246,7 @@ describe("createCheckout", () => {
     const calls = fakeBillplz(() => ({ json: billJson() }));
     for (const overrides of [
       { callbackUrl: "http://localhost:3000/api/payments/webhook" },
-      { successUrl: "http://webbi.my/s/site_abc/publish/return" },
+      { successUrl: "http://webbi.online/s/site_abc/publish/return" },
     ]) {
       const error = await paymentError(billplzProvider.createCheckout(checkoutInput(overrides)));
       expect(error.code).toBe("payments_not_configured");

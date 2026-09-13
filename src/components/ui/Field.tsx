@@ -23,7 +23,7 @@ export function ErrorText({ children, className }: { children: ReactNode; classN
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   invalid?: boolean;
-  /** Fixed text shown before the value, e.g. "+60" or "webbi.my/w/". */
+  /** Fixed text shown before the value, e.g. "+60" or "webbi.online/w/". */
   leading?: ReactNode;
 }
 

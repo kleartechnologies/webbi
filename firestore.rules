@@ -16,9 +16,15 @@ rules_version = '2';
 //                         requests this day and month.
 //   siteAi/{siteId}     – server only: AI requests made for one website and the
 //                         lock that allows one AI request per website at a time.
-//   publicSites/{slug}  – the published copy of a site. World-readable, server
-//                         written. This is the only collection the public
-//                         renderer (/w/[slug]) reads.
+//                         moderationStatus ("active" | "suspended") is written
+//                         only by the server; a suspended site's draft can't be
+//                         edited from a browser either.
+//   siteModeration/{id} – server only: why a website was suspended.
+//   publicSites/{slug}  – the published copy of a site (or, while its website is
+//                         suspended, a marker with no content). Anyone can get
+//                         one by its link; nobody can list them. Server written.
+//                         This is the only collection the public renderer
+//                         (/w/[slug]) reads.
 //   slugs/{slug}        – slug registry, server only.
 //   payments/{id}       – payment records, server written, owner readable.
 
@@ -54,8 +60,10 @@ service cloud.firestore {
       allow create, delete: if false;
 
       // Editing is limited to the draft content and its bookkeeping fields.
-      // ownerUid, status, paid, slug and published can never be changed here.
+      // ownerUid, status, paid, slug, published and the moderation fields can
+      // never be changed here, and a suspended website can't be edited at all.
       allow update: if isOwner(resource)
+        && resource.data.get('moderationStatus', 'active') != 'suspended'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
              ['draft', 'sourceDescription', 'generation', 'language', 'updatedAt'])
         && isString(request.resource.data.sourceDescription, 4000);
@@ -70,8 +78,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Moderation notes: only the server (Admin SDK) touches these.
+    match /siteModeration/{siteId} {
+      allow read, write: if false;
+    }
+
+    // One live page at a time, by its link. Listing would hand out every
+    // published link at once, so it is refused.
     match /publicSites/{slug} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if false;
       allow write: if false;
     }
 

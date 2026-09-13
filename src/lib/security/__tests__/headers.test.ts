@@ -243,7 +243,7 @@ describe("Billplz callback stays open to Billplz", () => {
   it("answers a server-to-server POST with no sign-in, App Check or Origin, and rejects a bad signature on its own", async () => {
     const body = new URLSearchParams({ id: "bill-1", paid: "true", state: "paid", x_signature: "0".repeat(64) });
     const response = await webhook(
-      new Request("https://webbi.my/api/payments/webhook", {
+      new Request("https://webbi.online/api/payments/webhook", {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
         body: body.toString(),

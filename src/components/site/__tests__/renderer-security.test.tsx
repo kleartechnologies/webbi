@@ -34,6 +34,22 @@ function hostileSite(unsafe: string): SiteContent {
   return site;
 }
 
+/** Owner-written text fields, wherever they sit in a site. Ids, kinds, colours and URLs are left alone. */
+const TEXT_KEYS = new Set([
+  "name", "tagline", "title", "subtitle", "headline", "subheadline", "eyebrow", "body", "description", "price",
+  "question", "answer", "quote", "author", "label", "text", "note", "address", "area", "message", "caption", "role", "summary",
+]);
+
+function withHostileText<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(withHostileText) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, v]) => [key, typeof v === "string" && TEXT_KEYS.has(key) ? HOSTILE_TEXT : withHostileText(v)]),
+    ) as T;
+  }
+  return value;
+}
+
 describe("public renderer: customer content can't become markup or script", () => {
   it.each(UNSAFE_SCHEMES)("renders %s in every link field as nothing clickable", (unsafe) => {
     const markup = html(hostileSite(unsafe));
@@ -67,6 +83,50 @@ describe("public renderer: customer content can't become markup or script", () =
 
   it("refuses unsafe image URLs at the schema, so a published page never loads one", () => {
     for (const unsafe of [...UNSAFE_SCHEMES, "//evil.example/x.png"]) {
+      const site = structuredClone(DEMO_SITES["hafiz-rahman"]);
+      site.business.logo = { url: unsafe };
+      expect(siteContentSchema.safeParse(site).success, unsafe).toBe(false);
+    }
+  });
+
+  it.each(Object.keys(DEMO_SITES))("shows hostile text in every text field of %s as text, with no tag, handler or style injection", (slug) => {
+    const markup = html(withHostileText(DEMO_SITES[slug]));
+    expect(markup).not.toMatch(/<script/i);
+    expect(markup).not.toMatch(/<svg[^>]*onload/i);
+    const structure = markup.replace(/="[^"]*"/g, '=""');
+    expect(structure).not.toMatch(/<[a-z]+[^>]*\son[a-z]+=/i);
+    expect(markup.split("&lt;script&gt;alert(1)&lt;/script&gt;").length - 1).toBeGreaterThanOrEqual(5);
+    for (const url of urls(markup)) expect(url, url).toMatch(ALLOWED);
+    for (const [, src] of markup.matchAll(/<iframe[^>]*\ssrc="([^"]*)"/gi)) expect(src).toMatch(/^https:\/\/www\.google\.com\/maps\?/);
+    for (const [, style] of markup.matchAll(/\sstyle="([^"]*)"/gi)) expect(style).not.toMatch(/url\(|expression|javascript|&lt;/i);
+  });
+
+  it("keeps a hostile http(s) link inside its own attribute, never a new attribute or tag", () => {
+    for (const href of [
+      `https://evil.example/"><script>alert(1)</script>`,
+      `https://evil.example/' onmouseover='alert(1)`,
+      `https://evil.example/" autofocus onfocus="alert(1)`,
+    ]) {
+      const site = structuredClone(DEMO_SITES["hafiz-rahman"]);
+      site.cta = { ...site.cta, kind: "link", href };
+      site.business.instagram = href;
+      site.business.facebook = href;
+      const markup = html(site);
+      expect(markup).not.toMatch(/<script/i);
+      const structure = markup.replace(/="[^"]*"/g, '=""');
+      expect(structure).not.toMatch(/<[a-z]+[^>]*\s(on[a-z]+|autofocus)=/i);
+      for (const url of urls(markup)) expect(url, url).toMatch(ALLOWED);
+    }
+  });
+
+  it("refuses data:, blob: and SVG image addresses at the schema", () => {
+    for (const unsafe of [
+      "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' onload='alert(1)'/>",
+      "data:image/png;base64,iVBORw0KGgo=",
+      "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
+      "blob:https://webbi.online/0b6c",
+      " javascript:alert(1)",
+    ]) {
       const site = structuredClone(DEMO_SITES["hafiz-rahman"]);
       site.business.logo = { url: unsafe };
       expect(siteContentSchema.safeParse(site).success, unsafe).toBe(false);
