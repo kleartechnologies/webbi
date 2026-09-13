@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { DEMO_SITES } from "@/lib/site/demo";
 import { publicSitePath } from "@/lib/site/flow";
 import { PRESETS } from "@/lib/site/presets";
+import { resolveTemplateId } from "@/lib/site/templates";
 import { BrowserChrome } from "./BrowserChrome";
 import { HOST } from "./content";
 import { ExampleRail } from "./ExampleRail";
@@ -24,7 +25,7 @@ export function Examples() {
   const [active, setActive] = useState(0);
   const tab = TABS[active];
   const site = DEMO_SITES[tab.slug];
-  const preset = PRESETS[site.theme.preset];
+  const preset = PRESETS[resolveTemplateId(site)];
 
   return (
     <Band id="examples" z={3} gutter={false} className="bg-ink text-white">

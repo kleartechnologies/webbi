@@ -7,11 +7,11 @@ import { AuthForm, LegalNote, type AuthMode } from "@/components/app/AuthForm";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { Icon, Spinner } from "@/components/ui";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { getCategory } from "@/lib/site/categories";
 import { siteHost, siteName } from "@/lib/site/flow";
 import { PRESETS } from "@/lib/site/presets";
 import { slugify } from "@/lib/site/slug";
 import { subscribeSite } from "@/lib/site/store";
+import { resolveTemplateId } from "@/lib/site/templates";
 import type { Site } from "@/lib/site/types";
 
 /**
@@ -35,7 +35,7 @@ export function AccountView({ siteId }: { siteId: string }) {
   }, [status, site, router]);
 
   const preset = site
-    ? PRESETS[site.draft?.theme.preset ?? getCategory(site.generation?.understanding?.category).preset]
+    ? PRESETS[resolveTemplateId({ theme: site.draft?.theme, business: { category: site.draft?.business.category ?? site.generation?.understanding?.category } })]
     : null;
 
   return (

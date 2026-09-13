@@ -1,6 +1,7 @@
 import {
-  Barlow,
+  Archivo,
   Bricolage_Grotesque,
+  IBM_Plex_Mono,
   Lora,
   Marcellus,
   Plus_Jakarta_Sans,
@@ -19,7 +20,7 @@ export const jakarta = Plus_Jakarta_Sans({
   display: "swap",
 });
 
-// Site preset faces: declared globally, downloaded only when a site uses them.
+// Site template faces: declared globally, downloaded only when a site uses them.
 export const lora = Lora({
   subsets: ["latin"],
   variable: "--font-lora",
@@ -35,10 +36,20 @@ export const marcellus = Marcellus({
   preload: false,
 });
 
-export const barlow = Barlow({
+/** Bold: one variable file with the width axis the design stretches its headings on. */
+export const archivo = Archivo({
   subsets: ["latin"],
-  weight: ["500", "600", "700", "800"],
-  variable: "--font-barlow",
+  axes: ["wdth"],
+  variable: "--font-archivo",
+  display: "swap",
+  preload: false,
+});
+
+/** Trust: labels, prices and phone numbers. */
+export const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["500", "600"],
+  variable: "--font-plex-mono",
   display: "swap",
   preload: false,
 });
@@ -48,5 +59,6 @@ export const fontVariables = [
   jakarta.variable,
   lora.variable,
   marcellus.variable,
-  barlow.variable,
+  archivo.variable,
+  plexMono.variable,
 ].join(" ");

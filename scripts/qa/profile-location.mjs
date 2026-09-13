@@ -225,7 +225,8 @@ const profileFacts = (page) =>
     const imgs = [...document.querySelectorAll("header img, h1 ~ *, main img")].filter((i) => /amir|profile|img_/i.test(i.getAttribute("src") ?? ""));
     const header = document.querySelector("header");
     const headerImg = header?.querySelector("img");
-    const initial = header ? [...header.querySelectorAll("span")].find((s) => s.textContent.trim().length === 1 && s.className.includes("bg-site-accent")) : null;
+    // The letter tile's colour differs per template, so it is found by its hook, not a class.
+    const initial = header?.querySelector("[data-site-initial]") ?? null;
     const heroImgs = [...document.querySelectorAll("img")].filter((i) => i.closest("header") === null && i.getBoundingClientRect().width > 0 && i.getBoundingClientRect().width <= 100 && i.getAttribute("alt"));
     return {
       headerImgAlt: headerImg?.getAttribute("alt") ?? null,
@@ -362,7 +363,9 @@ const profileFacts = (page) =>
     console.log(`     map frame: ${frame.url().slice(0, 80)}… ${JSON.stringify(inner).slice(0, 220)}`);
     expect(!inner.error && inner.tiles > 0, `map frame has no tiles: ${JSON.stringify(inner)}`);
     const prof = await profileFacts(visitor);
-    expect(prof.headerImgAlt === "Amir" && prof.headerImgWidth === 32, `header photo ${JSON.stringify(prof)}`);
+    // Every template's header draws the brand mark (photo, logo or letter) at 36px.
+    expect(prof.headerImgAlt === "Amir" && prof.headerImgWidth === 36, `header photo ${JSON.stringify(prof)}`);
+    expect(prof.initial === null, "initial avatar shown next to the photo on the public page");
     expect(prof.heroPhoto.some((p) => p.alt === "Amir" && p.width === 88), `hero photo ${JSON.stringify(prof.heroPhoto)}`);
     expect(prof.brokenImages === 0, `${prof.brokenImages} broken image(s)`);
     await visitor.evaluate(() => window.scrollTo(0, 0));
@@ -452,7 +455,7 @@ const profileFacts = (page) =>
     await saved();
     const prof = await page.evaluate(() => {
       const header = document.querySelector("header");
-      const initial = header ? [...header.querySelectorAll("span")].find((s) => s.className.includes("bg-site-accent")) : null;
+      const initial = header?.querySelector("[data-site-initial]") ?? null;
       return { initial: initial?.textContent.trim() ?? null, headerImg: Boolean(header?.querySelector("img")) };
     });
     expect(prof.initial === "A" && !prof.headerImg, `fallback wrong: ${JSON.stringify(prof)}`);
@@ -576,7 +579,7 @@ const profileFacts = (page) =>
     await page.waitForFunction(() => !document.querySelector("#business-logo img"), { timeout: 5000 });
     await savedOn(page);
     const h = await heroFacts(page);
-    const initial = await page.evaluate(() => [...document.querySelectorAll("header span")].find((s) => s.className.includes("bg-site-accent"))?.textContent.trim() ?? null);
+    const initial = await page.evaluate(() => document.querySelector("header [data-site-initial]")?.textContent.trim() ?? null);
     expect(!h.headerLogo && initial && initial.length === 1, `logo fallback: logo ${h.headerLogo}, initial ${initial}`);
     expect(h.img?.loaded, "cover lost when the logo was removed");
     await page.screenshot({ path: path.join(shots, "p12-restaurant-editor-logo-removed.png") });

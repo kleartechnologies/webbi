@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { siteContentSchema, whatsappSchema } from "../schema";
+import { getCategory } from "../categories";
+import { siteContentSchema, storedSiteContentSchema, whatsappSchema } from "../schema";
 import { DEMO_SITES, DEMO_SLUGS } from "../demo";
 import { isReservedSlug, isValidSlug } from "../slug";
 import { mapsUrl, safeUrl, telUrl, whatsappUrl } from "../links";
@@ -30,6 +31,22 @@ describe("siteContentSchema", () => {
     expect(siteContentSchema.safeParse({ ...valid, business: { ...valid.business, category: "spaceship" } }).success).toBe(false);
     expect(siteContentSchema.safeParse({ ...valid, theme: { preset: "neon" } }).success).toBe(false);
     expect(siteContentSchema.safeParse({ ...valid, sections: [{ id: "x", type: "iframe", html: "<script>" }] }).success).toBe(false);
+  });
+
+  it("stored content with a missing or unknown template gets its category's template, and nothing else changes", () => {
+    for (const theme of [{ preset: "neon" }, {}, undefined, null, "warm"]) {
+      const parsed = storedSiteContentSchema.safeParse({ ...valid, theme });
+      expect(parsed.success).toBe(true);
+      if (!parsed.success) continue;
+      expect(parsed.data.theme.preset).toBe(getCategory(valid.business.category).preset);
+      expect({ ...parsed.data, theme: undefined }).toEqual({ ...valid, theme: undefined });
+    }
+    const custom = storedSiteContentSchema.parse({ ...valid, theme: { preset: "neon", accent: "#123456" } });
+    expect(custom.theme).toEqual({ preset: getCategory(valid.business.category).preset, accent: "#123456" });
+    expect(storedSiteContentSchema.parse({ ...valid, theme: { preset: "bright" } }).theme.preset).toBe("bright");
+    // The repair is about the template only: the rest of the schema stays strict.
+    expect(storedSiteContentSchema.safeParse({ ...valid, theme: { preset: "neon" }, sections: [] }).success).toBe(false);
+    expect(storedSiteContentSchema.safeParse({ ...valid, theme: { preset: "neon", accent: "red; background:url(x)" } }).success).toBe(false);
   });
 
   it("requires at least one section and caps at twelve", () => {

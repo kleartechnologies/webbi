@@ -98,6 +98,30 @@ describe("/w/[slug] and moderation", () => {
     }
   });
 
+  it("a suspended link shows the same generic notice whatever template the website uses", async () => {
+    const pages = new Set<string>();
+    for (const preset of ["bright", "trust", "bold", "elegant", "warm", "neon", undefined]) {
+      const site = content();
+      docs.set("kedai-aisyah", { slug: "kedai-aisyah", content: { ...site, theme: { ...site.theme, preset } }, suspended: true, ...SECRETS });
+      const markup = await render("kedai-aisyah");
+      expect(markup).toContain("This website is currently unavailable.");
+      expect(markup).not.toContain("data-preset");
+      expect(markup).not.toContain("Kedai Aisyah Test");
+      pages.add(markup);
+    }
+    expect(pages.size).toBe(1);
+  });
+
+  it("renders a live website whose stored template is missing or unknown with its category's template", async () => {
+    for (const preset of ["neon", undefined]) {
+      const site = content();
+      docs.set("kedai-aisyah", { siteId: "site-a", slug: "kedai-aisyah", content: { ...site, theme: { preset } } });
+      const markup = await render("kedai-aisyah");
+      expect(markup).toContain('data-preset="bold"');
+      expect(markup).toContain("Kedai Aisyah Test");
+    }
+  });
+
   it("still 404s a link with nothing published", async () => {
     await expect(render("nothing-here")).rejects.toThrow();
     expect((await generateMetadata(params("nothing-here"))).title).toBe("Not found");

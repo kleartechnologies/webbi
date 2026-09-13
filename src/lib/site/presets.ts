@@ -1,6 +1,8 @@
 /**
- * Site visual presets from the Webbi design system. A site picks one preset;
- * the renderer exposes it as CSS variables (--site-accent, --site-font, …).
+ * Site templates from the approved Webbi template designs. A site picks one
+ * (stored as `theme.preset`, see templates.ts); the renderer exposes its core
+ * palette as CSS variables (--site-accent, --site-font, …) and each template's
+ * own layout, type and surfaces come from src/components/site/skin.ts.
  */
 export const PRESET_IDS = ["warm", "elegant", "bold", "trust", "bright"] as const;
 export type PresetId = (typeof PRESET_IDS)[number];
@@ -10,12 +12,13 @@ export interface Preset {
   label: string;
   description: string;
   accent: string;
+  /** A lighter accent for use on the template's dark surfaces. */
   accentAlt: string;
   ink: string;
   ground: string;
   line: string;
   muted: string;
-  /** Dark hero treatment (bold preset). */
+  /** Dark hero treatment (Bold). */
   heroDark: boolean;
   /** CSS font stack for the site's display face. */
   font: string;
@@ -41,12 +44,12 @@ export const PRESETS: Record<PresetId, Preset> = {
     id: "elegant",
     label: "Elegant",
     description: "Beauty, photography, boutiques",
-    accent: "#A8546A",
-    accentAlt: "#A8546A",
-    ink: "#2E2226",
-    ground: "#FBF6F4",
-    line: "#EEDDE0",
-    muted: "#6B545A",
+    accent: "#9C4260",
+    accentAlt: "#8A4A61",
+    ink: "#2B2024",
+    ground: "#F7F2EE",
+    line: "#E4DAD4",
+    muted: "#6E5F63",
     heroDark: false,
     font: "var(--font-marcellus), Georgia, serif",
     fontLabel: "Marcellus",
@@ -55,26 +58,26 @@ export const PRESETS: Record<PresetId, Preset> = {
     id: "bold",
     label: "Bold",
     description: "Cars, fitness, high-energy brands",
-    accent: "#C62828",
-    accentAlt: "#C62828",
-    ink: "#15171C",
-    ground: "#F4F5F7",
-    line: "#E3E5EA",
-    muted: "#5C616D",
+    accent: "#E62B18",
+    accentAlt: "#FF4B33",
+    ink: "#0A0E15",
+    ground: "#F4F1EA",
+    line: "#C9C3B6",
+    muted: "#5A626D",
     heroDark: true,
-    font: "var(--font-barlow), 'Barlow', ui-sans-serif, system-ui, sans-serif",
-    fontLabel: "Barlow",
+    font: "var(--font-archivo), 'Archivo', ui-sans-serif, system-ui, sans-serif",
+    fontLabel: "Archivo",
   },
   trust: {
     id: "trust",
     label: "Trust",
     description: "Services, property, professionals",
-    accent: "#1D5FD1",
-    accentAlt: "#0E6B63",
-    ink: "#142033",
-    ground: "#F3F6FA",
-    line: "#DFE6F0",
-    muted: "#4B5A72",
+    accent: "#256B8E",
+    accentAlt: "#6E8B78",
+    ink: "#172A3A",
+    ground: "#F7F8F6",
+    line: "#DCE3E2",
+    muted: "#5E7180",
     heroDark: false,
     font: "var(--font-jakarta), 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif",
     fontLabel: "Plus Jakarta Sans",
@@ -82,13 +85,13 @@ export const PRESETS: Record<PresetId, Preset> = {
   bright: {
     id: "bright",
     label: "Bright",
-    description: "Tutors, retail, fresh and friendly",
-    accent: "#157A5B",
-    accentAlt: "#157A5B",
-    ink: "#15261D",
-    ground: "#F4F8F4",
-    line: "#D8E5DC",
-    muted: "#46594F",
+    description: "Tutors, classes, fresh and friendly",
+    accent: "#24323D",
+    accentAlt: "#8CC9E8",
+    ink: "#24323D",
+    ground: "#FFFDF7",
+    line: "#EFE8DA",
+    muted: "#5A6A75",
     heroDark: false,
     font: "var(--font-jakarta), 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif",
     fontLabel: "Plus Jakarta Sans",

@@ -12,7 +12,7 @@
   --font-sans: var(--font-ui);
   --font-lora: var(--font-lora), Georgia, serif;
   --font-marcellus: var(--font-marcellus), Georgia, serif;
-  --font-barlow: var(--font-barlow), "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-site-mono: var(--font-plex-mono), "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* App palette */
   --color-navy: #22307a;
@@ -100,13 +100,13 @@
 }
 
 :root {
-  /* Default site preset (trust) so utilities have a value outside a site root. */
-  --site-accent: #1d5fd1;
-  --site-accent-alt: #0e6b63;
-  --site-ink: #142033;
-  --site-ground: #f3f6fa;
-  --site-line: #dfe6f0;
-  --site-muted: #4b5a72;
+  /* Default site template (trust) so utilities have a value outside a site root. */
+  --site-accent: #256b8e;
+  --site-accent-alt: #6e8b78;
+  --site-ink: #172a3a;
+  --site-ground: #f7f8f6;
+  --site-line: #dce3e2;
+  --site-muted: #5e7180;
   --site-font: var(--font-ui);
   color-scheme: light;
 }
@@ -167,6 +167,37 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .fade-up, .fade-in { animation: none; }
+}
+
+/*
+  Customer-site template surfaces (src/components/site/skin.ts). Fixed textures
+  from the approved designs only: no site content ever reaches this file.
+*/
+.site-grain {
+  background-image: radial-gradient(rgba(43, 31, 22, 0.045) 1px, transparent 1.2px);
+  background-size: 4px 4px;
+}
+.site-grain-dark {
+  background-image: radial-gradient(rgba(251, 247, 240, 0.05) 1px, transparent 1.2px);
+  background-size: 4px 4px;
+}
+.site-stripe {
+  background-color: #dbccc8;
+  background-image: repeating-linear-gradient(135deg, #dbccc8 0 14px, #cec0bc 14px 28px);
+}
+.site-marker {
+  background: #fff0b8;
+  border-radius: 6px;
+  padding: 0 0.12em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.site-wide { font-variation-settings: "wdth" 112; }
+.site-wider { font-variation-settings: "wdth" 125; }
+.site-block {
+  background: var(--site-accent);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 /*

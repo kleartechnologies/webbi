@@ -1,11 +1,14 @@
 import type { IconName } from "@/components/ui/Icon";
 import { ICON_PATHS } from "@/components/ui/icons.generated";
+import { cn } from "@/lib/cn";
 import { getCategory, type Category } from "@/lib/site/categories";
 import { siteStrings, type SiteStrings } from "@/lib/site/i18n";
 import { callNumber, chatUrl, ctaHref, telUrl } from "@/lib/site/links";
 import { resolveLocation } from "@/lib/site/location";
 import { PRESETS, type Preset } from "@/lib/site/presets";
 import type { SectionOf, SectionType, SiteContent } from "@/lib/site/schema";
+import { resolveTemplateId, type TemplateId } from "@/lib/site/templates";
+import { SKINS, type Skin } from "./skin";
 
 /**
  * "public" is the live site at /w/[slug]. "preview" is the same renderer inside
@@ -18,7 +21,7 @@ export interface PrimaryCta {
   href: string | null;
   label: string;
   icon: IconName;
-  /** WhatsApp green instead of the site accent. */
+  /** A WhatsApp button (green on templates that use WhatsApp green). */
   green: boolean;
 }
 
@@ -32,7 +35,10 @@ export interface NavItem {
 export interface RenderCtx {
   site: SiteContent;
   category: Category;
+  /** The template this site renders with (always a known one, see templates.ts). */
+  template: TemplateId;
   preset: Preset;
+  skin: Skin;
   strings: SiteStrings;
   mode: RenderMode;
   primary: PrimaryCta;
@@ -40,6 +46,8 @@ export interface RenderCtx {
   chat: string | null;
   /** tel: link, when the business has a phone or WhatsApp number. */
   call: string | null;
+  /** The number to show next to a call link, as the owner typed it. */
+  phone: string | null;
   /** Anchor target for outbound links. */
   target?: "_blank";
   rel?: string;
@@ -47,38 +55,65 @@ export interface RenderCtx {
 
 export function buildCtx(site: SiteContent, mode: RenderMode): RenderCtx {
   const category = getCategory(site.business.category);
-  const preset = PRESETS[site.theme.preset];
+  const template = resolveTemplateId(site);
   const number = callNumber(site);
   const isWhatsapp = site.cta.kind === "whatsapp";
   const green = isWhatsapp && (category.ctaIcon === "chat" || /whatsapp/i.test(site.cta.label));
+  const phone = site.business.phone?.trim() || (site.business.whatsapp ? `+${site.business.whatsapp}` : null);
   return {
     site,
     category,
-    preset,
+    template,
+    preset: PRESETS[template],
+    skin: SKINS[template],
     strings: siteStrings(site.language),
     mode,
     primary: { href: ctaHref(site), label: site.cta.label, icon: category.ctaIcon, green },
     chat: chatUrl(site),
     call: number ? telUrl(number) : null,
+    phone: number ? phone : null,
     target: mode === "preview" ? "_blank" : undefined,
     rel: mode === "preview" ? "noreferrer" : undefined,
   };
 }
 
-/** Heading treatment per preset (Marcellus has no bold; Barlow wants shouting). */
+/** Heading treatment per template (Marcellus has no bold; Archivo shouts). */
 export function headingClass(preset: Preset): string {
-  switch (preset.id) {
-    case "elegant":
-      return "font-site font-normal";
-    case "bold":
-      return "font-site font-extrabold uppercase";
-    default:
-      return "font-site font-bold";
-  }
+  return SKINS[preset.id].heading;
+}
+
+/** A template button: filled or outline, or WhatsApp green where the template uses it. */
+export function buttonClass(ctx: RenderCtx, variant: "primary" | "outline", green = false): string {
+  const { skin } = ctx;
+  if (green && skin.whatsappGreen) return cn(skin.btn, "bg-whatsapp text-white");
+  return cn(skin.btn, variant === "primary" ? skin.btnPrimary : skin.btnOutline);
 }
 
 export function findSection<T extends SectionType>(site: SiteContent, type: T): SectionOf<T> | undefined {
   return site.sections.find((s): s is SectionOf<T> => s.type === type && s.enabled);
+}
+
+/** A section's place among the page's sections after the hero, from 0. */
+export function sectionIndex(ctx: RenderCtx, id: string): number {
+  return Math.max(0, ctx.site.sections.filter((s) => s.enabled && s.type !== "hero").findIndex((s) => s.id === id));
+}
+
+export const twoDigits = (n: number) => String(n).padStart(2, "0");
+
+/** One or two letters for a monogram tile. */
+export function initialsOf(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const first = words[0]?.charAt(0) ?? "";
+  const last = words.length > 1 ? words[words.length - 1].charAt(0) : "";
+  return (first + last).toUpperCase();
+}
+
+/** Average star rating and count from the site's own reviews, if it shows any. */
+export function ratingOf(site: SiteContent): { average: string; count: number } | null {
+  const reviews = findSection(site, "reviews");
+  if (!reviews?.items.length) return null;
+  const total = reviews.items.reduce((sum, r) => sum + (r.rating ?? 5), 0);
+  return { average: (total / reviews.items.length).toFixed(1), count: reviews.items.length };
 }
 
 /** Up to four in-page anchors, in the order customers care about. */

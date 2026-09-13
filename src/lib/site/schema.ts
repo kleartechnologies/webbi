@@ -8,6 +8,7 @@
 import { z } from "zod";
 import { CATEGORY_IDS, HERO_MODES } from "./categories";
 import { PRESET_IDS } from "./presets";
+import { isTemplateId, resolveTemplateId } from "./templates";
 
 export const SITE_VERSION = 1 as const;
 
@@ -242,7 +243,7 @@ export const themeSchema = z.object({
 });
 export type Theme = z.infer<typeof themeSchema>;
 
-export const siteContentSchema = z.object({
+const siteContentObject = z.object({
   version: z.literal(SITE_VERSION),
   language: z.enum(LANGUAGES),
   business: businessSchema,
@@ -250,7 +251,26 @@ export const siteContentSchema = z.object({
   cta: ctaSchema,
   sections: z.array(sectionSchema).min(1).max(12),
 });
-export type SiteContent = z.infer<typeof siteContentSchema>;
+
+/** What editors, publishing and AI write: every field strict, the template included. */
+export const siteContentSchema = siteContentObject;
+export type SiteContent = z.infer<typeof siteContentObject>;
+
+/**
+ * A stored site with no template, or one this version doesn't know, gets the
+ * one its category suggests (see templates.ts) instead of failing validation.
+ * Only the template is repaired, on a copy; nothing else about the content changes.
+ */
+export function withUsableTemplate(input: unknown): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+  const site = input as { theme?: unknown; business?: { category?: unknown } };
+  const theme = site.theme && typeof site.theme === "object" && !Array.isArray(site.theme) ? (site.theme as Record<string, unknown>) : null;
+  if (theme && isTemplateId(theme.preset)) return input;
+  return { ...site, theme: { ...(theme ?? {}), preset: resolveTemplateId({ business: site.business }) } };
+}
+
+/** Read side (live sites, loaded drafts): the same strict schema after the template repair above. */
+export const storedSiteContentSchema = z.preprocess(withUsableTemplate, siteContentObject);
 
 /** Output of the "AI understands" step, shown on the Confirm screen. */
 export const understandingSchema = z.object({

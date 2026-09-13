@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { publicEnv } from "@/lib/env";
-import { siteContentSchema } from "./schema";
+import { storedSiteContentSchema } from "./schema";
 
 /**
  * Read side of publishing. Live sites are stored at publicSites/{slug}, which
@@ -13,7 +13,8 @@ import { siteContentSchema } from "./schema";
 const publicSiteSchema = z.object({
   siteId: z.string().min(1),
   slug: z.string().min(1),
-  content: siteContentSchema,
+  // A live site whose template is missing or unknown still renders, with its category's template.
+  content: storedSiteContentSchema,
   publishedAt: z.string().optional(),
 });
 export type PublicSite = z.infer<typeof publicSiteSchema>;

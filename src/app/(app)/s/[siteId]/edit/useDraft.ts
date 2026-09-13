@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ZodError } from "zod";
 import { siteContentSchema, type SiteContent } from "@/lib/site/schema";
 import { updateSite } from "@/lib/site/store";
+import { isTemplateId, resolveTemplateId } from "@/lib/site/templates";
 
 export type SaveState = "saved" | "dirty" | "saving" | "invalid" | "error";
 
@@ -40,7 +41,10 @@ function toIssues(error: ZodError): Issues {
  * ~1s after the last change, and flushed when the screen unmounts.
  */
 export function useDraft(siteId: string, initial: SiteContent) {
-  const [draft, setDraft] = useState<SiteContent>(initial);
+  // An older draft without a usable template opens with its category's one, so the next save validates.
+  const [draft, setDraft] = useState<SiteContent>(() =>
+    isTemplateId(initial.theme?.preset) ? initial : { ...initial, theme: { ...initial.theme, preset: resolveTemplateId(initial) } },
+  );
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [issues, setIssues] = useState<Issues>({});
   const pending = useRef<SiteContent | null>(null);

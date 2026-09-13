@@ -3,8 +3,9 @@
 import { Chip, Field, Icon, Input, Textarea } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { CATEGORIES } from "@/lib/site/categories";
-import { PRESET_IDS, PRESETS, presetStyle } from "@/lib/site/presets";
+import { PRESETS, presetStyle } from "@/lib/site/presets";
 import { CTA_KINDS, type Cta, type SiteContent } from "@/lib/site/schema";
+import { resolveTemplateId, switchTemplate, TEMPLATE_IDS } from "@/lib/site/templates";
 import { SectionHeading } from "./EditorBits";
 import type { Issues, Update } from "./useDraft";
 
@@ -33,10 +34,11 @@ const KIND_LABELS: Record<Cta["kind"], string> = {
 
 const clean = (value: string) => (value.trim() ? value : undefined);
 
-/** Preset, accent colour and the main button. Everything stays inside the design system. */
+/** Template, accent colour and the main button. Everything stays inside the design system. */
 export function StyleTab({ site, update, issues }: Props) {
   const category = CATEGORIES[site.business.category];
-  const preset = PRESETS[site.theme.preset];
+  const template = resolveTemplateId(site);
+  const preset = PRESETS[template];
   const accent = site.theme.accent;
   const setTheme = (patch: Partial<SiteContent["theme"]>) => update((d) => ({ ...d, theme: { ...d.theme, ...patch } }));
   const setCta = (patch: Partial<Cta>) => update((d) => ({ ...d, cta: { ...d.cta, ...patch } }));
@@ -46,17 +48,22 @@ export function StyleTab({ site, update, issues }: Props) {
   return (
     <div className="flex flex-col gap-[22px]">
       <div className="flex flex-col gap-[10px]">
-        <SectionHeading title="Style" />
-        <div className="grid grid-cols-1 gap-2 @md:grid-cols-2">
-          {PRESET_IDS.map((id) => {
+        <SectionHeading title="Template" note={`${PRESETS[category.preset].label} suits ${category.label.toLowerCase()}`} />
+        <p className="text-[12px] text-muted">
+          Changes only how your website looks. Your words, photos, AI credits, payment and live status stay exactly as they are.
+        </p>
+        <div className="grid grid-cols-1 gap-2 @md:grid-cols-2" role="group" aria-label="Template">
+          {TEMPLATE_IDS.map((id) => {
             const p = PRESETS[id];
-            const selected = id === site.theme.preset;
+            const selected = id === template;
             return (
               <button
                 key={id}
                 type="button"
+                data-template={id}
                 aria-pressed={selected}
-                onClick={() => setTheme({ preset: id })}
+                // The only thing a template switch writes: theme.preset in the draft.
+                onClick={() => update((d) => switchTemplate(d, id))}
                 style={presetStyle(p, accent)}
                 className={cn(
                   "flex flex-col gap-[6px] rounded-card border-[1.5px] bg-surface px-4 py-3 text-left transition-colors",

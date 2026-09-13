@@ -8,6 +8,7 @@ import type { Language, OfferingKind } from "./schema";
 const STRINGS = {
   en: {
     about: "About",
+    whyUs: "Why choose us",
     gallery: "Gallery",
     reviews: "Reviews",
     faq: "Questions",
@@ -31,6 +32,11 @@ const STRINGS = {
     closed: "Closed",
     follow: "Follow",
     socialMedia: "Social media",
+    explore: "Explore",
+    visit: "Visit",
+    serviceArea: "Service area",
+    directContact: "Direct contact",
+    browse: "Browse",
     kinds: {
       products: "Products",
       services: "Services",
@@ -45,6 +51,7 @@ const STRINGS = {
   },
   ms: {
     about: "Tentang kami",
+    whyUs: "Kenapa pilih kami",
     gallery: "Galeri",
     reviews: "Ulasan",
     faq: "Soalan lazim",
@@ -68,6 +75,11 @@ const STRINGS = {
     closed: "Tutup",
     follow: "Ikuti",
     socialMedia: "Media sosial",
+    explore: "Terokai",
+    visit: "Kunjungi",
+    serviceArea: "Kawasan servis",
+    directContact: "Hubungi terus",
+    browse: "Lihat",
     kinds: {
       products: "Produk",
       services: "Perkhidmatan",

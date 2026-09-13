@@ -5,11 +5,11 @@ import { useState } from "react";
 import { Button, ButtonLink, Icon, type IconName } from "@/components/ui";
 import { PRICE_LABEL } from "@/lib/env";
 import { formatEdited } from "@/lib/format";
-import { getCategory } from "@/lib/site/categories";
 import { hasUnpublishedChanges, publicSitePath, publicSiteUrl, resumePath, siteHost, siteName } from "@/lib/site/flow";
 import { PRESETS, presetStyle } from "@/lib/site/presets";
 import { slugify } from "@/lib/site/slug";
 import { deleteDraftSite } from "@/lib/site/store";
+import { resolveTemplateId } from "@/lib/site/templates";
 import type { Site } from "@/lib/site/types";
 
 function ActionTile({
@@ -57,7 +57,7 @@ function ActionTile({
 /** Preset-coloured banner until the real renderer thumbnail lands (Phase 6). */
 function SiteBanner({ site }: { site: Site }) {
   const content = site.published ?? site.draft;
-  const presetId = content?.theme.preset ?? getCategory(site.generation?.understanding?.category).preset;
+  const presetId = resolveTemplateId({ theme: content?.theme, business: { category: content?.business.category ?? site.generation?.understanding?.category } });
   const preset = PRESETS[presetId];
   const hero = content?.sections.find((s) => s.type === "hero");
   const image = hero && hero.type === "hero" ? hero.image : undefined;

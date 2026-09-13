@@ -56,7 +56,9 @@ function renderSection(ctx: RenderCtx, section: SiteSection): ReactNode {
 /**
  * The one renderer every Webbi goes through: the live site at /w/[slug], the
  * ready-screen preview, the editor preview and the landing phone all render
- * the same structured Site JSON with this component. No hooks, so it works in
+ * the same structured Site JSON with this component. The site's template
+ * (Warm, Elegant, Bold, Trust or Bright) only changes presentation: the same
+ * content, links and sections render in every one. No hooks, so it works in
  * server and client components alike. Layout switches on the container width
  * (@md / @3xl), so a scaled 1100px preview gets the desktop layout.
  */
@@ -71,25 +73,26 @@ export function SiteRenderer({ site, mode = "public", stickyCta = true, banner, 
   return (
     <div
       lang={site.language === "ms" ? "ms" : "en"}
-      data-preset={ctx.preset.id}
+      data-preset={ctx.template}
       className={cn(
         // `isolate` keeps the site's own layers (its sticky header and CTA bar) inside this box, so a
         // preview can never paint over the chrome of the app screen it sits on.
-        "@container relative isolate flex w-full flex-col bg-site-ground font-ui text-site-ink antialiased",
+        "@container relative isolate flex w-full flex-col overflow-x-clip bg-site-ground text-site-ink antialiased",
+        ctx.skin.root,
         mode === "public" ? "min-h-dvh" : "min-h-full",
         className,
       )}
-      style={presetStyle(ctx.preset, site.theme.accent)}
+      style={presetStyle(ctx.preset, site.theme?.accent)}
     >
       {banner}
       <SiteHeader ctx={ctx} nav={nav} />
       <main className="flex flex-col">
         {hero && hero.type === "hero" ? <Hero ctx={ctx} section={hero} /> : null}
         {!ctaInHero ? <PrimaryCta ctx={ctx} /> : null}
-        <QuickNav items={nav} />
+        <QuickNav ctx={ctx} items={nav} />
         {sections.map((section) => renderSection(ctx, section))}
       </main>
-      <SiteFooter ctx={ctx} />
+      <SiteFooter ctx={ctx} nav={nav} />
       {stickyCta ? <StickyCta ctx={ctx} /> : null}
     </div>
   );
