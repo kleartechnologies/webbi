@@ -10,14 +10,15 @@ export const maxDuration = 15;
 
 const bodySchema = z.object({
   sourceDescription: z.string().trim().min(12).max(4000),
-  understanding: understandingSchema,
+  /** Only from pages loaded before the description was read after creation (POST /api/ai/understand). */
+  understanding: understandingSchema.optional(),
 });
 
 /**
  * Starts a new website for the signed-in account. The owner, status, payment
  * fields and quota all come from the server: the browser only sends the
- * description and what was understood from it. 409 while the account already
- * has an unpublished website; 429 once it has started the day's limit.
+ * description. 409 while the account already has an unpublished website; 429
+ * once it has started the day's limit.
  */
 export async function POST(request: Request) {
   try {

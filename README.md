@@ -60,11 +60,23 @@ One Next.js app serves everything. Each customer website is a validated JSON doc
 | `/dashboard`, `/signin` | Owner's sites and sign-in |
 | `/w/{slug}` | Public renderer. Reads `publicSites/{slug}` (cached, invalidated on publish) or a built-in demo site |
 | `/api/sites`, `/api/sites/delete` | Start a website (one unpublished website per account, 3 starts a day) and delete an unpaid draft |
-| `/api/ai/understand`, `/api/ai/generate` | Server-only AI calls (the OpenAI key never reaches the browser) |
+| `/api/ai/understand`, `/api/ai/generate` | Server-only AI calls for one of the caller's own drafts: the browser sends only `{ siteId }` and the server builds the request from the saved site (the OpenAI key never reaches the browser) |
 | `/api/publish/slug`, `/checkout`, `/confirm`, `/republish` | Slug availability, Billplz bill creation, return-page payment confirmation, push edits to a paid site |
 | `/api/payments/webhook` | Billplz payment callback (X Signature verified) |
 
 Starting a website needs a signed-in account (not a guest). `POST /api/sites` runs one Admin SDK transaction on `userQuotas/{uid}`: it refuses with 409 while the account has an unpublished site (pending, failed or unpaid payments included) and with 429 after 3 starts in the current Malaysia day. Publishing (a verified payment) or deleting the draft frees the slot; deleting never gives back a start. Accounts that already had several drafts before this limit keep all of them untouched; their oldest draft (by `createdAt`) is treated as the one in progress until it is published or deleted.
+
+AI cost protection (`src/lib/ai/guard.ts`). The only code that reaches a model provider is `runAiJob`, used by the two AI routes. Each request:
+
+1. needs a signed-in account (401 without one, 403 for a guest) and names a website that exists (404), belongs to the caller and isn't published (403);
+2. is rebuilt from what is saved on that site: the description, the confirmed details, the language. Nothing else in the body is read, so the browser can't choose the model, the prompt or `max_completion_tokens`;
+3. passes one Firestore transaction that refuses with **409** while another AI request for the same website holds its lock, and **429** once the website has had 3 reads of its description or 3 builds (the first plus two rebuilds), or the account has made **10 AI requests today** or **30 this month** (Malaysia calendar day and month; reading a description and building a website share that allowance). A refused request calls nothing and counts nothing;
+4. takes the lock and counts the request in that same transaction, and only then calls the provider;
+5. saves the result on the site and releases the lock in a second transaction. A lock left behind by a request that died (a crash, or the platform stopping the function) is taken over after 2 minutes.
+
+An accepted request that fails still counts (a timeout, a provider error or an unusable answer), since the provider may already have billed it. It is given back only when the provider turned it away before doing any work: no key, a rejected key, an unknown model, no credit left, or rate limited. Providers retry at most once. The build allows up to 16,384 output tokens: a full draft can reach about 10,000 tokens of JSON, plus reasoning tokens. Responses never include provider messages, keys, setting names or stack traces.
+
+**Operational spending cap.** The limits above cap requests per account, not total spend across many accounts. Set a hard monthly ceiling on the OpenAI side as well: in the OpenAI platform dashboard, set the project's monthly budget and usage limits (Settings → Limits / Billing; the wording may change), and prefer prepaid credits with auto-recharge off, so spend stops when the credit runs out. The key and the ceiling live only in the OpenAI dashboard and the server environment, never in this repository.
 
 Firestore collections (rules in `firestore.rules`):
 
@@ -72,7 +84,8 @@ Firestore collections (rules in `firestore.rules`):
 | --- | --- | --- |
 | `users/{uid}` | owner | profile |
 | `sites/{siteId}` | owner reads; owner may update only `draft`, `sourceDescription`, `generation`, `language`, `updatedAt`; create and delete are server-only (`/api/sites`) | draft content, flow status, `slug`/`paid`/`published` (server-only) |
-| `userQuotas/{uid}` | server-only | `openDraftSiteId` (the account's one unpublished website) and `draftsCreatedToday` / `draftsDay` (Malaysia calendar day) |
+| `userQuotas/{uid}` | server-only | `openDraftSiteId` (the account's one unpublished website), `draftsCreatedToday` / `draftsDay` (Malaysia calendar day), and AI requests `aiRequestsToday` / `aiDay` and `aiRequestsThisMonth` / `aiMonth` |
+| `siteAi/{siteId}` | server-only | one small document per website: `understandings`, `generations` and the AI `lock`; deleted with the draft |
 | `publicSites/{slug}` | world-readable, server-only writes | the published copy of a site, plus `siteId` (never the owner) |
 | `slugs/{slug}` | server-only | slug → siteId reservation, claimed inside the payment transaction |
 | `payments/{id}` | owner reads, server-only writes | one record per checkout: provider, amount, status |
@@ -122,8 +135,8 @@ Owners can push later edits to a paid site with **Publish changes** in the edito
 ## Tests and QA
 
 ```bash
-npm test          # unit tests (vitest): slug rules, flow resume logic, schema, phone/link helpers, env parsing, Billplz payments, website limits
-npm run test:rules  # Firestore rules + real-transaction race test against the Firestore emulator (needs Java and the firebase CLI)
+npm test          # unit tests (vitest): slug rules, flow resume logic, schema, phone/link helpers, env parsing, Billplz payments, website limits, AI limits and locks (providers faked; no real AI calls)
+npm run test:rules  # Firestore rules + real-transaction race tests (website starts, AI builds) against the Firestore emulator (needs Java and the firebase CLI)
 npm run lint
 npx tsc --noEmit
 npm run build

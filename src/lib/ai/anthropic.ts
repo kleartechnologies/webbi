@@ -17,7 +17,8 @@ function getClient(): Anthropic {
       "Webbi's AI isn't connected yet. Add ANTHROPIC_API_KEY to the server environment.",
     );
   }
-  client ??= new Anthropic({ apiKey, maxRetries: 2, timeout: 90_000 });
+  // One retry at most, and inside the routes' 60 s limit: every attempt can be billed.
+  client ??= new Anthropic({ apiKey, maxRetries: 1, timeout: 50_000 });
   return client;
 }
 

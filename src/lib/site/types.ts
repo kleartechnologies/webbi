@@ -53,6 +53,28 @@ export interface UserQuotaDoc {
   draftsCreatedToday: number;
   /** Server calendar day (Asia/Kuala_Lumpur, YYYY-MM-DD) that draftsCreatedToday counts. */
   draftsDay: string;
+  /** Malaysia day (YYYY-MM-DD) that aiRequestsToday counts. Missing on accounts that never used the AI. */
+  aiDay?: string;
+  /** AI requests (understand + generate) accepted on aiDay, including failed ones. See src/lib/ai/guard.ts. */
+  aiRequestsToday?: number;
+  /** Malaysia month (YYYY-MM) that aiRequestsThisMonth counts. */
+  aiMonth?: string;
+  aiRequestsThisMonth?: number;
+  updatedAt: Timestamp;
+}
+
+/**
+ * Firestore document at siteAi/{siteId}. Server only. Counts the AI requests
+ * made for one website and holds its lock. Deleted with the draft.
+ */
+export interface SiteAiDoc {
+  ownerUid: string;
+  /** Accepted "read my description" requests. */
+  understandings: number;
+  /** Accepted website builds: the first and every rebuild. */
+  generations: number;
+  /** Set while a request runs; stale after AI_LOCK_TTL_MS. */
+  lock: { requestId: string; kind: "understand" | "generate"; startedAt: number } | null;
   updatedAt: Timestamp;
 }
 

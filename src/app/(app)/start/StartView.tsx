@@ -11,7 +11,7 @@ import { ApiError, callApi, errorMessage } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { resumePath } from "@/lib/site/flow";
 import type { Understanding } from "@/lib/site/schema";
-import { createSite, getSite, subscribeUserSites } from "@/lib/site/store";
+import { createSite, getSite, subscribeUserSites, updateSite } from "@/lib/site/store";
 
 const IN_PROGRESS = "You already have a website in progress. Finish or publish it before creating another website.";
 const DAILY_LIMIT = "You've reached today's website creation limit. Please try again tomorrow.";
@@ -43,6 +43,8 @@ function Start() {
   const [error, setError] = useState<string | null>(null);
   /** Where to continue the website already in progress. A hint only: the server enforces the limit. */
   const [inProgress, setInProgress] = useState<string | null>(null);
+  /** The account's new website whose description hasn't been read yet (the last attempt failed). */
+  const [pending, setPending] = useState<{ id: string; description: string } | null>(null);
   const empty = !text.trim();
   const uid = user?.uid;
 
@@ -52,7 +54,15 @@ function Start() {
       uid,
       (sites) => {
         const open = sites.find((site) => site.status !== "published");
-        setInProgress(open ? resumePath(open) : null);
+        if (open && open.generation?.status === "understanding" && !open.generation.understanding) {
+          // Still on this step: reading the description again continues the same website.
+          setPending({ id: open.id, description: open.sourceDescription });
+          setText((current) => current || open.sourceDescription);
+          setInProgress(null);
+        } else {
+          setPending(null);
+          setInProgress(open ? resumePath(open) : null);
+        }
       },
       () => setInProgress(null),
     );
@@ -67,18 +77,29 @@ function Start() {
     }
     setBusy(true);
     setError(null);
+    let created = false;
     try {
-      const { understanding } = await callApi<{ understanding: Understanding }>("/api/ai/understand", { description });
-      const siteId = await createSite({ sourceDescription: description, understanding });
+      let siteId = pending?.id;
+      if (siteId) {
+        if (pending?.description !== description) await updateSite(siteId, { sourceDescription: description });
+      } else {
+        siteId = await createSite({ sourceDescription: description });
+        created = true;
+        setPending({ id: siteId, description });
+      }
+      // The server reads the description from the site, never from this request.
+      await callApi<{ understanding: Understanding }>("/api/ai/understand", { siteId });
       router.push(`/s/${siteId}/confirm`);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        const existingId = typeof err.details.existingSiteId === "string" ? err.details.existingSiteId : null;
-        const existing = existingId ? await getSite(existingId).catch(() => null) : null;
+      const existingId = err instanceof ApiError && typeof err.details.existingSiteId === "string" ? err.details.existingSiteId : null;
+      if (existingId) {
+        const existing = await getSite(existingId).catch(() => null);
         setInProgress(existing ? resumePath(existing) : "/dashboard");
         setError(null);
+      } else if (err instanceof ApiError && err.status === 429 && !created && !pending && !err.details.reason) {
+        setError(DAILY_LIMIT);
       } else {
-        setError(err instanceof ApiError && err.status === 429 ? DAILY_LIMIT : errorMessage(err));
+        setError(errorMessage(err));
       }
       setBusy(false);
     }

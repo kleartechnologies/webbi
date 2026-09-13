@@ -2,7 +2,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { UnauthorizedError } from "@/lib/auth/verify";
-import { AiError } from "@/lib/ai/errors";
+import { AiError, AiQuotaError } from "@/lib/ai/errors";
 import { AdminNotConfiguredError } from "@/lib/firebase/admin";
 import { PaymentError } from "@/lib/payments/provider";
 import { DraftLimitError } from "@/lib/site/drafts";
@@ -32,8 +32,16 @@ export function handleApiError(error: unknown) {
   if (error instanceof ZodError) {
     return apiError(400, "bad_request", "Some of the details sent were invalid. Go back and check them.");
   }
+  if (error instanceof AiQuotaError) {
+    if (error.reason === "busy") return apiError(409, "conflict", error.message, { reason: error.reason });
+    return apiError(429, "rate_limited", error.message, { reason: error.reason });
+  }
   if (error instanceof AiError) {
-    if (error.code === "ai_not_configured") return apiError(503, "ai_not_configured", error.message);
+    if (error.code === "ai_not_configured") {
+      // The adapter's message names server settings: it belongs in the logs, not in a response.
+      console.error("[ai] not available:", error.message);
+      return apiError(503, "ai_not_configured", "Webbi's AI isn't available right now. Please try again later.");
+    }
     if (error.code === "rate_limited") return apiError(429, "rate_limited", error.message);
     return apiError(502, "ai_failed", error.message);
   }

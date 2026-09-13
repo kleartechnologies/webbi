@@ -7,7 +7,7 @@ import { CenteredWordmark } from "@/components/app/FlowChrome";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { SiteMissing } from "@/components/app/SiteMissing";
 import { Button, ButtonLink, Icon, Spinner } from "@/components/ui";
-import { callApi, errorMessage } from "@/lib/api/client";
+import { ApiError, callApi, errorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import type { SiteContent } from "@/lib/site/schema";
 import { updateSite } from "@/lib/site/store";
@@ -91,19 +91,10 @@ function Generating({ site }: { site: Site }) {
     const key = `${site.id}:${attempt}`;
     if (running.current === key) return;
     running.current = key;
-    // The understood CTA is the category default in the owner's language; only reuse it if they kept that category.
-    const ctaLabel = generation.understanding?.category === input.category ? generation.understanding?.ctaLabel : undefined;
     (async () => {
       try {
-        const { site: draft, model } = await callApi<{ site: SiteContent; model: string }>("/api/ai/generate", {
-          description: site.sourceDescription,
-          language: site.language,
-          tone: generation.understanding?.tone,
-          highlights: generation.understanding?.highlights,
-          ctaLabel,
-          input,
-        });
-        await updateSite(site.id, { draft, generation: { ...generation, status: "ready", model, error: undefined } });
+        // The server builds the request from this site and saves the draft itself.
+        await callApi<{ site: SiteContent; model: string }>("/api/ai/generate", { siteId: site.id });
         // The snapshot effect above redirects once the doc reads status "ready";
         // a separate timer here could fire after the user has already moved on.
         setStep(5);
@@ -111,6 +102,9 @@ function Generating({ site }: { site: Site }) {
         if (leaving.current) return;
         const message = errorMessage(err);
         setError(message);
+        // 409: an earlier visit (or another tab) is still building this site and
+        // saves its own result, so the site must not be marked as failed.
+        if (err instanceof ApiError && err.status === 409) return;
         await updateSite(site.id, { generation: { ...generation, status: "error", error: message } }).catch(() => {});
       }
     })();

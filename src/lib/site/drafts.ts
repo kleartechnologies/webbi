@@ -76,7 +76,11 @@ async function activeDraftId(tx: Transaction, uid: string, lockedId: string | nu
 
 export interface NewDraftInput {
   sourceDescription: string;
-  understanding: Understanding;
+  /**
+   * Sent only by pages loaded before the understand step moved after creation.
+   * Without it the draft waits in "understanding" for POST /api/ai/understand.
+   */
+  understanding?: Understanding;
 }
 
 /** Starts the account's next website, or throws DraftLimitError. Returns the new site id. */
@@ -97,7 +101,11 @@ export async function createDraftSite(uid: string, input: NewDraftInput): Promis
     if (active) {
       if (active !== lockedId) {
         // A draft found by lookup becomes the lock. The site itself is left exactly as it is.
-        tx.set(quotaRef, { openDraftSiteId: active, draftsCreatedToday: createdToday, draftsDay: today, updatedAt: now });
+        tx.set(
+          quotaRef,
+          { openDraftSiteId: active, draftsCreatedToday: createdToday, draftsDay: today, updatedAt: now },
+          { merge: true },
+        );
       }
       return {
         refused: new DraftLimitError(
@@ -124,16 +132,19 @@ export async function createDraftSite(uid: string, input: NewDraftInput): Promis
       publishedAt: null,
       draft: null,
       sourceDescription: input.sourceDescription,
-      generation: { status: "understood", understanding: input.understanding },
-      language: input.understanding.language,
+      generation: input.understanding
+        ? { status: "understood", understanding: input.understanding }
+        : { status: "understanding" },
+      // Replaced by the understood language as soon as the description is read.
+      language: input.understanding?.language ?? "en",
     };
     tx.set(siteRef, { ...site, createdAt: now, updatedAt: now });
-    tx.set(quotaRef, {
-      openDraftSiteId: siteRef.id,
-      draftsCreatedToday: createdToday + 1,
-      draftsDay: today,
-      updatedAt: now,
-    });
+    // Merged: the same document carries the account's AI counters (src/lib/ai/guard.ts).
+    tx.set(
+      quotaRef,
+      { openDraftSiteId: siteRef.id, draftsCreatedToday: createdToday + 1, draftsDay: today, updatedAt: now },
+      { merge: true },
+    );
     return { siteId: siteRef.id };
   });
 
@@ -154,6 +165,8 @@ export async function deleteDraftSite(uid: string, siteId: string): Promise<void
       throw new PublishError("conflict", "This Webbi is paid for, so it can't be deleted.");
     }
     tx.delete(siteRef);
+    // The draft's AI counts and lock go with it. The account's own AI counts stay.
+    tx.delete(db.doc(`siteAi/${siteId}`));
     // Only a lock on this draft is released: never another site's.
     if ((quotaSnap.data() as Partial<UserQuotaDoc> | undefined)?.openDraftSiteId === siteId) {
       tx.update(quotaRef, { openDraftSiteId: null, updatedAt: FieldValue.serverTimestamp() });

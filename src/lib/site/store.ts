@@ -20,7 +20,6 @@ import {
 } from "firebase/firestore";
 import { callApi } from "@/lib/api/client";
 import { getClientDb } from "@/lib/firebase/client";
-import type { Understanding } from "./schema";
 import type { Site, SiteDoc } from "./types";
 
 const SITES = "sites";
@@ -30,11 +29,12 @@ function toSite(snap: QueryDocumentSnapshot<DocumentData>): Site {
 }
 
 /**
- * Starts a website for the signed-in account. Throws an ApiError with status 409
- * (and details.existingSiteId) when one is already in progress, or 429 past the
- * day's limit.
+ * Starts a website for the signed-in account, waiting in "understanding" until
+ * POST /api/ai/understand reads its description. Throws an ApiError with status
+ * 409 (and details.existingSiteId) when one is already in progress, or 429 past
+ * the day's limit.
  */
-export async function createSite(input: { sourceDescription: string; understanding: Understanding }): Promise<string> {
+export async function createSite(input: { sourceDescription: string }): Promise<string> {
   const { siteId } = await callApi<{ siteId: string }>("/api/sites", input);
   return siteId;
 }

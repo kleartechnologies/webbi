@@ -11,8 +11,11 @@ rules_version = '2';
 //                         Status, slug, payment and the published copy are
 //                         written only by the server (Admin SDK) after verified
 //                         payment.
-//   userQuotas/{uid}    – server only: the account's unpublished website and the
-//                         number of websites it started today.
+//   userQuotas/{uid}    – server only: the account's unpublished website, the
+//                         number of websites it started today, and its AI
+//                         requests this day and month.
+//   siteAi/{siteId}     – server only: AI requests made for one website and the
+//                         lock that allows one AI request per website at a time.
 //   publicSites/{slug}  – the published copy of a site. World-readable, server
 //                         written. This is the only collection the public
 //                         renderer (/w/[slug]) reads.
@@ -59,6 +62,11 @@ service cloud.firestore {
     }
 
     match /userQuotas/{uid} {
+      allow read, write: if false;
+    }
+
+    // AI counts and locks: only the AI routes (Admin SDK) touch these.
+    match /siteAi/{siteId} {
       allow read, write: if false;
     }
 
