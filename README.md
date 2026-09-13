@@ -208,8 +208,22 @@ Set in one place: `src/lib/security/headers.ts`, applied by `headers()` in `next
 - **App** (everything except `/w/` and `/api/`): scripts from Webbi plus `apis.google.com` (Firebase's Google sign-in loader); connections to Firebase Auth and Firestore; frames from the Firebase auth domain and Google Maps; images from Webbi, `data:`/`blob:` and Firebase Storage.
 - **Customer sites** (`/w/{slug}`): Webbi's own scripts only, no external connections, frames only from Google Maps.
 - **API** (`/api/`): `default-src 'none'` and `Cache-Control: private, no-store`. No route sends `Access-Control-Allow-*`; the Billplz callback needs none (server to server).
+- **Firebase Auth handler** (`/__/auth/…`, proxied to Firebase, see "Google sign-in domain"): Next.js passes Firebase's response through with Firebase's own headers (`cache-control: max-age=1800` and `strict-transport-security: max-age=31556926; includeSubDomains; preload`), and none of the rules above apply to it. So there is no CSP and no `X-Frame-Options` there, as on firebaseapp.com: the SDK frames `/__/auth/iframe` (also from the netlify.app fallback domain) and the handler runs Google's scripts. The header rules also exclude that path, so a response Next.js makes itself there never gets the app's framing block either. Nothing else lives under that path. Note that Firebase's HSTS includes `includeSubDomains`: once browsers load the handler from webbi.online, every `*.webbi.online` subdomain must serve HTTPS (Netlify and Firebase Hosting both do).
 
 `'unsafe-inline'` is allowed for scripts and styles because Next.js streams inline `<script>` payloads and a nonce would force every page to render dynamically (losing the static, CDN-cached landing). Scripts are still limited by origin, and customer content is never rendered as HTML. Adding a third-party script, font, image host, iframe or API called from the browser means adding its origin in `headers.ts`, or the browser blocks it. Links from a `/w/` page into the app are plain `<a>` (full page load), because a client-side navigation would keep the site's stricter policy.
+
+## Google sign-in domain
+
+Google's account chooser names the host of Firebase's sign-in handler, `https://<NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN>/__/auth/handler`: with `webbi-85f26.firebaseapp.com` it says "to continue to webbi-85f26.firebaseapp.com". To make it say webbi.online, Webbi follows Firebase's documented reverse-proxy setup ([option 3](https://firebase.google.com/docs/auth/web/redirect-best-practices)):
+
+- `next.config.ts` rewrites `/__/auth/*` to `https://<NEXT_PUBLIC_FIREBASE_PROJECT_ID>.firebaseapp.com/__/auth/*` (`src/lib/firebase/authHandler.ts`). It is a transparent proxy, not a redirect, and only that path. It has to be a Next.js rewrite: on Netlify the Next.js function answers every path before `netlify.toml` rules are read. The target is built from the project id, never from the auth domain, so it can't loop.
+- The proxy is harmless while the auth domain is still firebaseapp.com, so it ships first. Switching happens in this order:
+  1. Deploy, then check `https://webbi.online/__/auth/handler` and `https://webbi.online/__/auth/iframe` return 200 HTML without `X-Frame-Options` or a CSP.
+  2. Google Cloud Console (project `webbi-85f26`) → APIs & Services → Credentials → OAuth 2.0 client "Web client (auto created by Google Service)" (`555593585084-1dgn4h89gbvi8ditg3csdrif9qu0rm82.apps.googleusercontent.com`): add the authorized redirect URI `https://webbi.online/__/auth/handler` and the authorized JavaScript origin `https://webbi.online`. Keep `https://webbi-85f26.firebaseapp.com/__/auth/handler`.
+  3. Firebase Console → Authentication → Settings → Authorized domains must list `webbi.online` (it does).
+  4. Netlify production `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=webbi.online`, then redeploy (it is inlined at build time).
+- Rollback: set `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` back to `webbi-85f26.firebaseapp.com` and redeploy. Same project, same Google client, so accounts and user ids don't change either way.
+- Builds served from webbi-my.netlify.app use the same auth domain, so their sign-in popup is cross-origin to webbi.online, exactly as it was to firebaseapp.com.
 
 ## Deploying rules and indexes
 
@@ -240,6 +254,7 @@ Environment variables to set under Site configuration → Environment variables 
 5. `firebase deploy --only firestore:rules,firestore:indexes,storage --project webbi-85f26` (already deployed once; re-run after changing rules).
 6. Netlify → Site configuration → Site protection: turn off team-only access so customers' sites are public.
 7. `NEXT_PUBLIC_SITE_URL=https://webbi.online` in the production context: it is the domain in share links and in each new bill's callback and return URLs. It is inlined at build time, so redeploy after changing it.
+8. Optional: `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=webbi.online` so Google sign-in names Webbi, only after the OAuth redirect URI is added (see "Google sign-in domain").
 
 ## Moderation and takedown
 

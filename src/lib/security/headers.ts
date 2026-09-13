@@ -9,6 +9,11 @@
  *   site (/w/{slug}, customers' public websites): no Firebase SDK, no auth;
  *        only Webbi's own scripts, optimised photos and the Google Maps embed.
  * API responses are JSON and get a policy that loads nothing at all.
+ * /__/auth/* is Firebase Auth's own handler, proxied from firebaseapp.com
+ * (src/lib/firebase/authHandler.ts). Next.js sends a proxied response with
+ * Firebase's headers as they are (these rules don't reach it), and the rules
+ * keep the app's CSP and X-Frame-Options off that path regardless: either
+ * would break the hidden sign-in iframe and the Google popup.
  *
  * Why 'unsafe-inline' in script-src: Next.js streams each page's React payload
  * as inline <script> tags. Allowing those without 'unsafe-inline' needs a
@@ -30,7 +35,10 @@
 export interface SecurityHeaderOptions {
   /** `next dev`: React needs eval for its debugging, HMR uses a websocket, emulators run on http://127.0.0.1. */
   dev?: boolean;
-  /** NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: Firebase Auth's hidden iframe and sign-in handler live there. */
+  /**
+   * NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: Firebase Auth's hidden iframe and sign-in handler live there.
+   * It may be the site's own domain (proxied /__/auth/), which a copy on another domain still has to frame.
+   */
   authDomain?: string;
 }
 
@@ -160,17 +168,30 @@ export interface HeaderRule {
  * /api/ replace just the CSP (and API responses are never cached).
  */
 export function securityHeaderRules(options: SecurityHeaderOptions = {}): HeaderRule[] {
+  const transport = [
+    { key: "Strict-Transport-Security", value: HSTS },
+    { key: "X-Content-Type-Options", value: "nosniff" },
+    { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+    { key: "Permissions-Policy", value: PERMISSIONS_POLICY },
+  ];
   return [
     {
-      source: "/:path*",
+      // Every path except Firebase Auth's proxied handler under /__/auth/.
+      source: "/:path((?!__/auth/).*)",
       headers: [
-        { key: "Strict-Transport-Security", value: HSTS },
-        { key: "X-Content-Type-Options", value: "nosniff" },
-        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        { key: "Permissions-Policy", value: PERMISSIONS_POLICY },
+        ...transport,
         { key: "X-Frame-Options", value: "DENY" },
         { key: "Content-Security-Policy", value: appCsp(options) },
       ],
+    },
+    {
+      // Firebase's handler pages: framed by the sign-in flow (including from the
+      // Netlify fallback domain) and running Google's scripts, so no framing
+      // header and no CSP, as firebaseapp.com serves them. The proxied response
+      // already carries Firebase's own headers; this only covers a response
+      // Next.js makes itself here (no proxy configured).
+      source: "/__/auth/:path+",
+      headers: transport,
     },
     {
       source: "/w/:path*",

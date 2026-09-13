@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as webhook } from "@/app/api/payments/webhook/route";
 import { handleApiError } from "@/lib/api/http";
 import { AdminNotConfiguredError } from "@/lib/firebase/admin";
+import { firebaseAuthHandlerOrigin, firebaseAuthRewrites } from "@/lib/firebase/authHandler";
 import { PaymentError } from "@/lib/payments";
 import {
   API_CSP,
@@ -33,7 +34,7 @@ const PROD: SecurityHeaderOptions = { authDomain: "webbi-85f26.firebaseapp.com" 
 
 /** Next's own compiler for next.config `headers()` sources: the regex it writes to routes-manifest.json. */
 const { buildCustomRoute } = createRequire(import.meta.url)("next/dist/lib/build-custom-route.js") as {
-  buildCustomRoute: (type: "header", route: object) => { regex: string };
+  buildCustomRoute: (type: "header" | "rewrite", route: object) => { regex: string };
 };
 
 /** The headers Next sends for a path: every matching rule applies, a later rule wins per header. */
@@ -184,6 +185,58 @@ describe("content security policy", () => {
     expect(config).toMatch(/poweredByHeader:\s*false/);
     expect(readFileSync(path.join(root, "netlify.toml"), "utf8")).not.toMatch(/\[\[headers\]\]/);
     expect(existsAny(["src/middleware.ts", "src/proxy.ts", "middleware.ts", "proxy.ts", "public/_headers"])).toBe(false);
+  });
+});
+
+describe("Firebase Auth handler under Webbi's own domain", () => {
+  const HANDLER_PATHS = ["/__/auth/handler", "/__/auth/iframe", "/__/auth/handler.js", "/__/auth/iframe.js", "/__/auth/experiments.js"];
+
+  it.each(HANDLER_PATHS)("%s gets transport headers only: no CSP or framing header, as Firebase serves it", (p) => {
+    const h = headersFor(p);
+    expect(h["strict-transport-security"]).toBe(HSTS);
+    expect(h["x-content-type-options"]).toBe("nosniff");
+    expect(h["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+    expect(h["x-frame-options"]).toBeUndefined();
+    expect(h["content-security-policy"]).toBeUndefined();
+    expect(h["cache-control"]).toBeUndefined();
+  });
+
+  it.each(["/__/auth", "/__/authorize", "/__/auth-handler", "/__/firebase/init.json", "/x/__/auth/handler", "/w/__/auth/handler", "/api/__/auth/handler"])(
+    "%s is not the handler and keeps the full headers",
+    (p) => {
+      const h = headersFor(p);
+      expect(h["x-frame-options"]).toBe("DENY");
+      expect(h["content-security-policy"]).toBeTruthy();
+    },
+  );
+
+  it("proxies only /__/auth/… to this project's firebaseapp.com, never to the auth domain", () => {
+    expect(firebaseAuthRewrites("webbi-85f26")).toEqual([
+      { source: "/__/auth/:path+", destination: "https://webbi-85f26.firebaseapp.com/__/auth/:path+" },
+    ]);
+    const rewriteRegex = new RegExp(buildCustomRoute("rewrite", firebaseAuthRewrites("webbi-85f26")[0]).regex);
+    for (const p of ["/__/auth/handler", "/__/auth/iframe", "/__/auth/handler.js"]) expect(rewriteRegex.test(p), p).toBe(true);
+    for (const p of ["/", "/__/auth", "/__/authorize", "/__/firebase/init.json", "/signin", "/api/sites", "/x/__/auth/handler"]) {
+      expect(rewriteRegex.test(p), p).toBe(false);
+    }
+  });
+
+  it("sets up no proxy for a missing or malformed project id", () => {
+    for (const id of [undefined, "", "evil.example", "webbi-85f26.firebaseapp.com/", "x", "a/b", "WEBBI", "webbi-85f26 x"]) {
+      expect(firebaseAuthRewrites(id), String(id)).toEqual([]);
+    }
+    expect(firebaseAuthHandlerOrigin(" webbi-85f26 ")).toBe("https://webbi-85f26.firebaseapp.com");
+  });
+
+  it("is wired as a Next.js rewrite from the project id (Netlify reads netlify.toml rules after the Next.js function)", () => {
+    const config = readFileSync(path.join(root, "next.config.ts"), "utf8");
+    expect(config).toMatch(/async rewrites\(\)[\s\S]*firebaseAuthRewrites\(process\.env\.NEXT_PUBLIC_FIREBASE_PROJECT_ID\)/);
+    expect(config).not.toMatch(/firebaseAuthRewrites\(process\.env\.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN/);
+    expect(readFileSync(path.join(root, "netlify.toml"), "utf8")).not.toMatch(/\[\[redirects\]\]|__\/auth/);
+  });
+
+  it("frames the handler from webbi.online once it is the auth domain", () => {
+    expect(appCspDirectives({ authDomain: "webbi.online" })["frame-src"]).toEqual(["https://webbi.online", "https://www.google.com"]);
   });
 });
 

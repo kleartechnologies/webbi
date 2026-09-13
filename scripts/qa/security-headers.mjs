@@ -114,6 +114,23 @@ await step("open redirect: /signin?next=https://evil.example stays on Webbi", as
   assert(!(res.headers.get("location") || "").includes("evil.example"), `redirects to ${res.headers.get("location")}`);
 });
 
+for (const [p, script] of [["/__/auth/handler", "handler.js"], ["/__/auth/iframe", "iframe.js"]]) {
+  await step(`Firebase Auth handler ${p} is proxied from firebaseapp.com with no framing header or CSP`, async () => {
+    const res = await fetch(`${base}${p}`, { redirect: "manual" });
+    assert(res.status === 200, `status ${res.status} (location ${res.headers.get("location")})`);
+    assert(/text\/html/.test(res.headers.get("content-type") || ""), `content-type ${res.headers.get("content-type")}`);
+    assert(!res.headers.get("x-frame-options"), `x-frame-options ${res.headers.get("x-frame-options")}`);
+    assert(!res.headers.get("content-security-policy"), `content-security-policy ${res.headers.get("content-security-policy")}`);
+    // Firebase's own headers pass through the proxy, so this is Firebase's HSTS, not Webbi's.
+    assert(res.headers.get("strict-transport-security")?.startsWith("max-age="), "no HSTS");
+    assert(!res.headers.get("access-control-allow-origin"), `access-control-allow-origin ${res.headers.get("access-control-allow-origin")}`);
+    const html = await res.text();
+    assert(html.includes(`src="${script}"`), `body doesn't load ${script}: ${html.slice(0, 300)}`);
+    const js = await fetch(`${base}/__/auth/${script}`);
+    assert(js.status === 200 && /javascript/.test(js.headers.get("content-type") || ""), `${script}: ${js.status} ${js.headers.get("content-type")}`);
+  });
+}
+
 const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ["--no-sandbox"] });
 
 async function open(p, { wait = 1500 } = {}) {

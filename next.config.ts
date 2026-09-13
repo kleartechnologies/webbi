@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { firebaseAuthRewrites } from "./src/lib/firebase/authHandler";
 import { securityHeaderRules } from "./src/lib/security/headers";
 
 /**
@@ -17,6 +18,17 @@ const nextConfig: NextConfig = {
       dev: process.env.NODE_ENV === "development",
       authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
     });
+  },
+  // Firebase Auth's Google sign-in handler, proxied so it can run on Webbi's own
+  // domain. A Next.js rewrite, not a netlify.toml proxy: on Netlify the Next.js
+  // function answers every path before netlify.toml rules are read.
+  // See src/lib/firebase/authHandler.ts.
+  async rewrites() {
+    return {
+      beforeFiles: firebaseAuthRewrites(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
+      afterFiles: [],
+      fallback: [],
+    };
   },
   images: {
     remotePatterns: [
