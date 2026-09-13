@@ -191,7 +191,24 @@ QA_BASE_URL=http://localhost:3108 npm run qa:industries
 
 That exercises the real model through the real adapter, but not your own key. To test your key itself, put it in `.env.local` (git-ignored) and use the plain dev server with `AI_PROVIDER=openai`, or test the production deploy — Netlify never overrides a key you set yourself.
 
+Security headers against a production server (`next dev` adds dev-only allowances, so check with `next start`):
+
+```bash
+npm run build && npx next start
+QA_SITE_SLUGS=some-published-slug npm run qa:headers   # headers on pages and API, no CORS grant, framing blocked, CSP violations in Chrome, photos + Maps on /w/ pages
+```
+
 Each `qa:industries` / `qa:publish` run against the real project leaves anonymous Auth users and their draft `sites` docs behind. `npm run qa:cleanup` lists them (dry run; needs `gcloud auth login`), and `npm run qa:cleanup -- --apply` deletes them. It only removes users with no sign-in provider or email, their draft sites, and orphaned `users` docs.
+
+## Security headers
+
+Set in one place: `src/lib/security/headers.ts`, applied by `headers()` in `next.config.ts` (nothing in `netlify.toml`, no middleware). Every response gets HSTS (`max-age=31536000`, no `includeSubDomains`/`preload` until the custom domain is settled), `nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, a Permissions-Policy that turns off camera, microphone, geolocation, payment and similar, `X-Frame-Options: DENY` and a CSP with `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'none'`.
+
+- **App** (everything except `/w/` and `/api/`): scripts from Webbi plus `apis.google.com` (Firebase's Google sign-in loader); connections to Firebase Auth and Firestore; frames from the Firebase auth domain and Google Maps; images from Webbi, `data:`/`blob:` and Firebase Storage.
+- **Customer sites** (`/w/{slug}`): Webbi's own scripts only, no external connections, frames only from Google Maps.
+- **API** (`/api/`): `default-src 'none'` and `Cache-Control: private, no-store`. No route sends `Access-Control-Allow-*`; the Billplz callback needs none (server to server).
+
+`'unsafe-inline'` is allowed for scripts and styles because Next.js streams inline `<script>` payloads and a nonce would force every page to render dynamically (losing the static, CDN-cached landing). Scripts are still limited by origin, and customer content is never rendered as HTML. Adding a third-party script, font, image host, iframe or API called from the browser means adding its origin in `headers.ts`, or the browser blocks it. Links from a `/w/` page into the app are plain `<a>` (full page load), because a client-side navigation would keep the site's stricter policy.
 
 ## Deploying rules and indexes
 
@@ -216,7 +233,7 @@ Environment variables to set under Site configuration → Environment variables 
 ### Before launch
 
 1. Firebase Console → Authentication → Sign-in method: enable **Anonymous**, **Google**, **Email/Password**; Settings → Authorized domains: add the Netlify domain (and the custom domain later).
-2. Firebase Console → Project settings → Service accounts → generate a key → `FIREBASE_SERVICE_ACCOUNT_BASE64` on Netlify (set as a **secret**, which Netlify only allows for the production / deploy-preview / branch-deploy contexts). Already set. Without it every `/api/*` route fails with a clear "server not configured" error.
+2. Firebase Console → Project settings → Service accounts → generate a key → `FIREBASE_SERVICE_ACCOUNT_BASE64` on Netlify (set as a **secret**, which Netlify only allows for the production / deploy-preview / branch-deploy contexts). Already set. Without it every `/api/*` route answers 503 `admin_not_configured` (the details go to the function log, not the response).
 3. `OPENAI_API_KEY` on Netlify (`AI_PROVIDER` unset or `openai`). Already set.
 4. Payments: Billplz, production API. The four `BILLPLZ_*` variables are set on Netlify, and with `PAYMENT_PROVIDER` unset they switch payments on. X Signature must be on in the Billplz account (see Payments). `PAYMENT_PROVIDER=none` is the off switch; `mock` is refused in production builds.
 5. `firebase deploy --only firestore:rules,firestore:indexes,storage --project webbi-85f26` (already deployed once; re-run after changing rules).

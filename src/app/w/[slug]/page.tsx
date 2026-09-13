@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteRenderer } from "@/components/site/SiteRenderer";
 import { Icon } from "@/components/ui/Icon";
@@ -43,10 +42,11 @@ function DemoBanner({ site }: { site: SiteContent }) {
   return (
     <div className="flex items-center justify-between gap-3 bg-navy px-4 py-2 text-[13px] text-white">
       <span className="truncate">{s.exampleBanner}</span>
-      <Link href="/start" className="flex shrink-0 items-center gap-1 rounded-pill bg-amber px-3 py-[6px] text-[12px] font-bold text-ink">
+      {/* A full page load into the app, which has its own security policy (src/lib/security/headers.ts). */}
+      <a href="/start" className="flex shrink-0 items-center gap-1 rounded-pill bg-amber px-3 py-[6px] text-[12px] font-bold text-ink">
         {s.buildYours}
         <Icon name="arrow_forward" size={16} />
-      </Link>
+      </a>
     </div>
   );
 }

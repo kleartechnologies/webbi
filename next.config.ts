@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { securityHeaderRules } from "./src/lib/security/headers";
 
 /**
  * The image optimiser only fetches Webbi's own uploads: Firebase download URLs
@@ -9,6 +10,14 @@ const bucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false,
+  // Browser security headers (CSP, framing, HSTS…): the one place they're set. See src/lib/security/headers.ts.
+  async headers() {
+    return securityHeaderRules({
+      dev: process.env.NODE_ENV === "development",
+      authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    });
+  },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "firebasestorage.googleapis.com", pathname: bucket ? `/v0/b/${bucket}/o/**` : "/v0/b/*/o/**" },

@@ -25,6 +25,47 @@ describe("safeNext", () => {
       expect(safeNext(hostile)).toBe(DEFAULT_NEXT);
     }
   });
+
+  const ORIGIN = "https://webbi-my.netlify.app";
+
+  it("accepts a relative destination and an absolute one on Webbi's own origin", () => {
+    expect(safeNext("/dashboard", ORIGIN)).toBe("/dashboard");
+    expect(safeNext("/s/abc123/publish?cancelled=1#top", ORIGIN)).toBe("/s/abc123/publish?cancelled=1#top");
+    expect(safeNext(`${ORIGIN}/s/abc123/edit?tab=photos`, ORIGIN)).toBe("/s/abc123/edit?tab=photos");
+  });
+
+  it("rejects external, script, data and disguised protocol-relative destinations", () => {
+    for (const hostile of [
+      "https://evil.example",
+      "http://evil.example/dashboard",
+      `${ORIGIN}.evil.example/dashboard`,
+      "http://webbi-my.netlify.app/dashboard",
+      "javascript:alert(1)",
+      "JavaScript:alert(document.cookie)",
+      " javascript:alert(1)",
+      "data:text/html,<script>alert(1)</script>",
+      "vbscript:msgbox(1)",
+      "file:///etc/passwd",
+      "//evil.example",
+      "///evil.example",
+      "/\\evil.example",
+      "\\\\evil.example",
+      "/\t/evil.example",
+      "/\n/evil.example",
+      "/..//evil.example",
+      "/.//evil.example",
+    ]) {
+      expect(safeNext(hostile, ORIGIN), hostile).toBe(DEFAULT_NEXT);
+    }
+  });
+
+  it("only ever returns a path that stays on the same origin", () => {
+    for (const value of ["/%2F%2Fevil.example", "/a/../../b", "/start?next=https://evil.example", "/?x=//evil.example"]) {
+      const next = safeNext(value, ORIGIN);
+      expect(next.startsWith("/") && !next.startsWith("//")).toBe(true);
+      expect(new URL(next, ORIGIN).origin).toBe(ORIGIN);
+    }
+  });
 });
 
 describe("authPath", () => {

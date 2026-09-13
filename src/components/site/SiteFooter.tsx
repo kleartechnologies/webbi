@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { RenderCtx } from "./context";
 import { SocialLinks } from "./SocialLinks";
 
@@ -12,9 +11,11 @@ export function SiteFooter({ ctx }: { ctx: RenderCtx }) {
       {site.theme.showCredit === false ? null : (
         <>
           {" "}· {strings.builtWith}{" "}
-          <Link href="/" target={target} rel={rel} prefetch={false} className="font-bold text-site-ink">
+          {/* A full page load, not a client-side navigation: Webbi's app has its own security policy (src/lib/security/headers.ts). */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- deliberate: next/link would keep the site's stricter CSP on the app */}
+          <a href="/" target={target} rel={rel} className="font-bold text-site-ink">
             Webbi
-          </Link>
+          </a>
         </>
       )}
     </footer>

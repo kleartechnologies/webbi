@@ -89,12 +89,14 @@ export interface ButtonLinkProps extends StyleProps, Omit<AnchorHTMLAttributes<H
   href: string;
   disabled?: boolean;
   prefetch?: boolean;
+  /** Load the destination as a new document instead of navigating client-side. */
+  fullLoad?: boolean;
 }
 
-/** Same look as Button, rendered as a link (internal via next/link, external via <a>). */
+/** Same look as Button, rendered as a link (internal via next/link, external or full-load via <a>). */
 export function ButtonLink({
   variant, size, block, icon, iconFill, iconPosition, loading,
-  href, disabled, prefetch, target, rel, className, children, ...rest
+  href, disabled, prefetch, fullLoad, target, rel, className, children, ...rest
 }: ButtonLinkProps) {
   const style = { variant, size, block, icon, iconFill, iconPosition, loading };
   const { classes, iconSize } = resolve(style, className);
@@ -107,7 +109,7 @@ export function ButtonLink({
     );
   }
   const external = /^(https?:|mailto:|tel:)/.test(href);
-  if (external) {
+  if (external || fullLoad) {
     return (
       <a href={href} target={target} rel={rel ?? (target === "_blank" ? "noopener noreferrer" : undefined)} className={classes} {...rest}>
         {content}

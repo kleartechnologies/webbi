@@ -14,14 +14,34 @@ export const DEFAULT_NEXT = "/dashboard";
 /** The creation flow — what every "Create My Website" CTA means. */
 export const CREATE_NEXT = "/start";
 
+/** The origin a destination must stay on: the page's own, or the configured public address outside a browser. */
+function currentOrigin(): string {
+  if (typeof window !== "undefined") return window.location.origin;
+  return process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+}
+
 /**
- * Only a same-origin path may be resumed after signing in, so a crafted ?next=
- * can never bounce someone off to another site. A leading "//" or "/\" is a
- * protocol-relative URL in disguise.
+ * Only a same-origin destination may be resumed after signing in, so a crafted
+ * ?next= can never bounce someone off to another site. The value is resolved
+ * the way the browser will resolve it: "//host", "/\host", "/\t/host" (browsers
+ * drop tabs and newlines) and "/..//host" all name another origin in disguise.
+ * An absolute URL on this origin is accepted and reduced to its path.
  */
-export function safeNext(value: string | null | undefined): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return DEFAULT_NEXT;
-  return value;
+export function safeNext(value: string | null | undefined, origin: string = currentOrigin()): string {
+  if (!value) return DEFAULT_NEXT;
+  if (!value.startsWith("/") && !/^https?:\/\//i.test(value)) return DEFAULT_NEXT;
+  if (/[\u0000-\u001f\u007f\\]/.test(value)) return DEFAULT_NEXT;
+  let url: URL;
+  let home: URL;
+  try {
+    home = new URL(origin);
+    url = new URL(value, home);
+  } catch {
+    return DEFAULT_NEXT;
+  }
+  if (url.origin !== home.origin) return DEFAULT_NEXT;
+  const path = `${url.pathname}${url.search}${url.hash}`;
+  return path.startsWith("//") ? DEFAULT_NEXT : path;
 }
 
 /** The /signin URL that opens the right face and remembers where the visitor was going. */

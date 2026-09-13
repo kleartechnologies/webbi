@@ -62,18 +62,18 @@ export function handleApiError(error: unknown) {
     return apiError(status, error.code, error.message);
   }
   if (error instanceof PaymentError) {
-    if (error.code === "payments_not_configured") return apiError(503, "payments_not_configured", error.message);
+    if (error.code === "payments_not_configured") {
+      // The message names server settings: it belongs in the logs, not in a response.
+      console.error("[payments] not available:", error.message);
+      return apiError(503, "payments_not_configured", "Payments aren't available right now. Please try again later.");
+    }
     if (error.code === "not_found") return apiError(404, "not_found", error.message);
     if (error.code === "bad_signature") return apiError(400, "bad_request", error.message);
     return apiError(502, "payment_failed", error.message);
   }
   if (error instanceof AdminNotConfiguredError) {
     console.error("[api] admin not configured");
-    return apiError(
-      503,
-      "admin_not_configured",
-      "Publishing isn't switched on for this deployment yet. The server needs its Firebase service account (see README).",
-    );
+    return apiError(503, "admin_not_configured", "Publishing isn't available right now. Please try again later.");
   }
   console.error("[api] unhandled", error);
   return apiError(500, "internal", "Something went wrong on our side. Please try again.");
