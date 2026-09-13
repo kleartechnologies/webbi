@@ -56,15 +56,28 @@ export const serverEnv = {
     return process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || undefined;
   },
   /**
-   * none  – payments not configured; Publish shows an honest "not yet" state.
-   * stripe – Stripe Checkout (FPX, cards, e-wallets), verified by webhook or
-   *          by retrieving the session from Stripe on return.
-   * mock  – local development only. Refused in production builds.
+   * none    – payments not configured; Publish shows an honest "not yet" state.
+   * billplz – Billplz (FPX and cards), Webbi's Malaysian provider. Verified by
+   *           the signed callback, or by reading the bill back from Billplz.
+   * stripe  – Stripe Checkout, kept as a second adapter behind the same interface.
+   * mock    – local development only. Refused in production builds.
+   *
+   * Left unset, Billplz is chosen once all three of its credentials are set, so
+   * the keys alone switch payments on. PAYMENT_PROVIDER=none keeps them off.
    */
-  get paymentProvider(): "none" | "stripe" | "mock" {
+  get paymentProvider(): "none" | "billplz" | "stripe" | "mock" {
     const value = process.env.PAYMENT_PROVIDER;
+    if (value === "billplz") return "billplz";
     if (value === "stripe") return "stripe";
     if (value === "mock" && process.env.NODE_ENV !== "production") return "mock";
+    if (
+      !value &&
+      process.env.BILLPLZ_SECRET_KEY &&
+      process.env.BILLPLZ_COLLECTION_ID &&
+      process.env.BILLPLZ_X_SIGNATURE_KEY
+    ) {
+      return "billplz";
+    }
     return "none";
   },
   get stripeSecretKey(): string | undefined {
@@ -73,7 +86,27 @@ export const serverEnv = {
   get stripeWebhookSecret(): string | undefined {
     return process.env.STRIPE_WEBHOOK_SECRET || undefined;
   },
+  /** Billplz API secret key. HTTP Basic username; never leaves the server. */
+  get billplzSecretKey(): string | undefined {
+    return process.env.BILLPLZ_SECRET_KEY || undefined;
+  },
+  /** The collection every Webbi bill is created in. */
+  get billplzCollectionId(): string | undefined {
+    return process.env.BILLPLZ_COLLECTION_ID || undefined;
+  },
+  /** Shared key Billplz signs callbacks and redirects with. Server only. */
+  get billplzXSignatureKey(): string | undefined {
+    return process.env.BILLPLZ_X_SIGNATURE_KEY || undefined;
+  },
+  /** Defaults to production. A trailing slash is optional. */
+  get billplzBaseUrl(): string {
+    const value = (process.env.BILLPLZ_BASE_URL || BILLPLZ_PRODUCTION_API).trim();
+    return value.replace(/\/+$/, "");
+  },
 };
+
+/** Billplz production API. The sandbox host is refused in production builds. */
+export const BILLPLZ_PRODUCTION_API = "https://www.billplz.com/api";
 
 /** Price of one website, in Malaysian sen (RM149.90). */
 export const PRICE_SEN = 14990;

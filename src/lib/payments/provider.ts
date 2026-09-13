@@ -5,11 +5,11 @@ import "server-only";
  *
  * Everything the rest of Webbi knows about taking money is this interface.
  * A provider turns a pending payment into a hosted checkout, and later tells
- * us — from its own records, never from anything the browser says — whether
+ * us (from its own records, never from anything the browser says) whether
  * that checkout was paid. Publishing happens only on a `paid` verification.
  */
 
-export type PaymentProviderName = "stripe" | "mock";
+export type PaymentProviderName = "billplz" | "stripe" | "mock";
 
 export interface CheckoutInput {
   /** Our payments/{paymentId} document, created before checkout starts. */
@@ -17,14 +17,21 @@ export interface CheckoutInput {
   siteId: string;
   uid: string;
   email?: string;
+  /** The account holder's name, when their sign-in gave us one. */
+  customerName?: string;
   businessName: string;
   /** Public URL the customer is buying, for the receipt line. */
   publicUrl: string;
   amountSen: number;
   currency: "myr";
-  /** Where the provider sends the customer afterwards. */
+  /**
+   * Where the provider sends the customer afterwards, with no query string.
+   * Each adapter adds whatever its provider needs to identify the checkout.
+   */
   successUrl: string;
   cancelUrl: string;
+  /** Server endpoint the provider calls to confirm payment, for providers that take one per checkout. */
+  callbackUrl: string;
 }
 
 export interface CheckoutSession {
@@ -38,13 +45,30 @@ export type PaymentVerification =
   | {
       state: "paid";
       providerRef: string;
-      paymentId: string;
+      /**
+       * Our payment id when the provider hands it back. Null when it can only be
+       * found through providerRef (Billplz callbacks don't echo references).
+       */
+      paymentId: string | null;
       amountSen: number;
       currency: string;
       paidAt: Date;
     }
   | { state: "pending"; providerRef: string; paymentId: string | null }
   | { state: "failed"; providerRef: string; paymentId: string | null; reason: string };
+
+/** What a provider's customer redirect says, before anyone believes it. */
+export interface RedirectRead {
+  /** The checkout the redirect is about. Only ever a lookup key. */
+  providerRef: string;
+  /** true when the signature verified; false when it is missing or wrong; null when the provider doesn't sign redirects. */
+  signatureValid: boolean | null;
+  /**
+   * What the redirect claims about payment. Never used to publish; a verified
+   * `false` only lets the return page stop waiting for a payment that didn't happen.
+   */
+  paid: boolean | null;
+}
 
 export interface PaymentProvider {
   readonly name: PaymentProviderName;
@@ -57,6 +81,12 @@ export interface PaymentProvider {
    * the call did not come from the provider.
    */
   parseWebhook(rawBody: string, headers: Headers): Promise<PaymentVerification | null>;
+  /**
+   * Reads the query string the provider appended to the customer's redirect.
+   * Returns null when the query isn't one of this provider's redirects. The
+   * result never proves payment; it only says which checkout to go and ask about.
+   */
+  parseRedirect?(query: URLSearchParams): RedirectRead | null;
 }
 
 export type PaymentErrorCode =

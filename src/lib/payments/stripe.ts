@@ -74,7 +74,7 @@ export const stripeProvider: PaymentProvider = {
             description: `Webbi · ${input.publicUrl}`,
             metadata: { paymentId: input.paymentId, siteId: input.siteId },
           },
-          success_url: input.successUrl,
+          success_url: `${input.successUrl}?session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: input.cancelUrl,
         },
         { idempotencyKey: `checkout:${input.paymentId}` },

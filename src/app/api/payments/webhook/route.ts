@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/api/http";
 import { getPaymentProvider, PaymentError } from "@/lib/payments";
-import { fulfilPayment, markPaymentFailed, PublishError } from "@/lib/site/publish";
+import { fulfilPayment, markPaymentFailed, PublishError, resolvePaymentId } from "@/lib/site/publish";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 /**
- * Provider → Webbi. The provider signs each call; anything unsigned is
- * rejected before it is read. A `paid` event is the authoritative path to
- * publishing (the return page is just the fast path for the same fulfilment).
+ * Provider → Webbi. Billplz POSTs the bill here (form-encoded, X Signature in
+ * the body); Stripe posts signed events. Anything whose signature doesn't verify
+ * is rejected with 400 before it is acted on. A verified `paid` is the
+ * authoritative path to publishing; the return page is only a fast path to the
+ * same idempotent fulfilment, and it asks the provider directly too.
  */
 export async function POST(request: Request) {
   let provider;
@@ -39,9 +41,11 @@ export async function POST(request: Request) {
         const result = await fulfilPayment(verification);
         return NextResponse.json({ received: true, slug: result.slug, published: result.published });
       }
-      case "failed":
-        if (verification.paymentId) await markPaymentFailed(verification.paymentId, verification.reason);
+      case "failed": {
+        const paymentId = await resolvePaymentId(verification);
+        if (paymentId) await markPaymentFailed(paymentId, verification.reason, verification.providerRef);
         return NextResponse.json({ received: true, failed: true });
+      }
       case "pending":
         return NextResponse.json({ received: true, pending: true });
     }

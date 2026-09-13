@@ -33,6 +33,9 @@ export class PublishError extends Error {
 
 const MAX_SLUG_SUFFIX = 6;
 
+/** One Firestore auto-id (or similar): no slashes, never empty. */
+export const PAYMENT_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
 export type SlugStatus = "available" | "yours" | "taken" | "invalid" | "incomplete" | "reserved";
 
 export interface SlugCheck {
@@ -123,13 +126,31 @@ export async function getPayment(paymentId: string): Promise<PaymentDoc | null> 
   return snap.exists ? (snap.data() as PaymentDoc) : null;
 }
 
-export async function markPaymentFailed(paymentId: string, reason: string): Promise<void> {
+/** The payment a provider checkout belongs to, found by the reference stored when checkout opened. */
+export async function findPaymentIdByProviderRef(providerRef: string): Promise<string | null> {
+  const snap = await adminDb().collection("payments").where("providerRef", "==", providerRef).limit(2).get();
+  if (snap.size > 1) console.error("[publish] more than one payment shares a provider reference", providerRef);
+  return snap.size === 1 ? snap.docs[0].id : null;
+}
+
+/**
+ * Ties a provider verification to one of our payment records: the id the
+ * provider handed back, or else the record whose providerRef matches. Null
+ * when neither gives a well-formed payment id.
+ */
+export async function resolvePaymentId(verification: PaymentVerification): Promise<string | null> {
+  const id = verification.paymentId ?? (await findPaymentIdByProviderRef(verification.providerRef));
+  return id && PAYMENT_ID.test(id) ? id : null;
+}
+
+export async function markPaymentFailed(paymentId: string, reason: string, providerRef?: string): Promise<void> {
   const ref = adminDb().doc(`payments/${paymentId}`);
   await adminDb().runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) return;
     const payment = snap.data() as PaymentDoc;
     if (payment.status === "paid") return; // never downgrade a verified payment
+    if (providerRef && payment.providerRef && payment.providerRef !== providerRef) return; // a different checkout
     tx.update(ref, { status: "failed", failureReason: reason, updatedAt: FieldValue.serverTimestamp() });
   });
 }
@@ -139,6 +160,8 @@ export interface FulfilResult {
   slug: string;
   /** True when this call did the publishing (false when it had already happened). */
   published: boolean;
+  /** True when another payment had already published this site; this one needs a refund. */
+  duplicate?: boolean;
 }
 
 /**
@@ -149,12 +172,20 @@ export async function fulfilPayment(
   verification: Extract<PaymentVerification, { state: "paid" }>,
 ): Promise<FulfilResult> {
   const db = adminDb();
-  const paymentRef = db.doc(`payments/${verification.paymentId}`);
+  const paymentId = await resolvePaymentId(verification);
+  if (!paymentId) throw new PublishError("not_found", "We couldn't match that payment to a website.");
+  const paymentRef = db.doc(`payments/${paymentId}`);
 
-  const result = await db.runTransaction(async (tx): Promise<FulfilResult> => {
+  // Throwing inside a transaction discards its writes, so a refusal that must
+  // still be recorded comes back as a value and is thrown after the commit.
+  const outcome = await db.runTransaction(async (tx): Promise<FulfilResult | { mismatch: string }> => {
     const paymentSnap = await tx.get(paymentRef);
     if (!paymentSnap.exists) throw new PublishError("not_found", "We couldn't find that payment.");
     const payment = paymentSnap.data() as PaymentDoc;
+    // The checkout that was paid must be the one this record opened.
+    if (payment.providerRef && payment.providerRef !== verification.providerRef) {
+      throw new PublishError("forbidden", "This payment doesn't belong to that checkout.");
+    }
 
     const siteRef = db.doc(`sites/${payment.siteId}`);
     const siteSnap = await tx.get(siteRef);
@@ -170,21 +201,35 @@ export async function fulfilPayment(
     }
 
     if (verification.amountSen !== payment.amountSen || verification.currency !== payment.currency) {
+      const failureReason = `amount_mismatch:${verification.amountSen}:${verification.currency}`;
       tx.update(paymentRef, {
         status: "failed",
-        failureReason: `amount_mismatch:${verification.amountSen}:${verification.currency}`,
+        failureReason,
         providerRef: verification.providerRef,
         updatedAt: FieldValue.serverTimestamp(),
       });
-      throw new PublishError("bad_request", "The amount paid didn't match the price. Please contact support.");
+      return { mismatch: failureReason };
+    }
+
+    const paidAt = Timestamp.fromDate(verification.paidAt);
+    const now = FieldValue.serverTimestamp();
+
+    // A second checkout for a site another payment already published. The money
+    // was taken, so keep an honest record of it, but publish and claim nothing.
+    if (site.status === "published" && site.slug) {
+      tx.update(paymentRef, {
+        status: "paid",
+        duplicate: true,
+        providerRef: verification.providerRef,
+        paidAt,
+        failureReason: null,
+        updatedAt: now,
+      });
+      return { siteId: payment.siteId, slug: site.slug, published: false, duplicate: true };
     }
 
     const content = publishableContent(site.draft);
-    const slug = site.status === "published" && site.slug
-      ? site.slug
-      : await claimSlug(tx, payment.slug, payment.siteId, payment.ownerUid);
-    const paidAt = Timestamp.fromDate(verification.paidAt);
-    const now = FieldValue.serverTimestamp();
+    const slug = await claimSlug(tx, payment.slug, payment.siteId, payment.ownerUid);
 
     tx.set(db.doc(`publicSites/${slug}`), {
       siteId: payment.siteId,
@@ -212,8 +257,15 @@ export async function fulfilPayment(
     return { siteId: payment.siteId, slug, published: true };
   });
 
-  revalidateTag(siteCacheTag(result.slug), { expire: 0 });
-  return result;
+  if ("mismatch" in outcome) {
+    console.error("[publish] paid amount doesn't match the price", { paymentId, reason: outcome.mismatch });
+    throw new PublishError("bad_request", "The amount paid didn't match the price. Please contact support.");
+  }
+  if (outcome.duplicate) {
+    console.error("[publish] duplicate payment for a site that is already live; refund it", { paymentId, siteId: outcome.siteId });
+  }
+  if (outcome.published) revalidateTag(siteCacheTag(outcome.slug), { expire: 0 });
+  return outcome;
 }
 
 /**

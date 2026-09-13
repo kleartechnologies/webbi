@@ -20,7 +20,8 @@ export const mockProvider: PaymentProvider = {
 
   async createCheckout(input: CheckoutInput): Promise<CheckoutSession> {
     const providerRef = `${PREFIX}${input.paymentId}`;
-    const url = new URL(input.successUrl.replace("{CHECKOUT_SESSION_ID}", providerRef));
+    const url = new URL(input.successUrl);
+    url.searchParams.set("session_id", providerRef);
     url.searchParams.set("mock", "1");
     return { url: url.toString(), providerRef };
   },

@@ -4,7 +4,7 @@ import { apiError, assertRateLimit, handleApiError } from "@/lib/api/http";
 import { requireUser } from "@/lib/auth/verify";
 import { PRICE_SEN, publicEnv } from "@/lib/env";
 import { getPaymentProvider } from "@/lib/payments";
-import { checkoutReturnPath, publicSiteUrl } from "@/lib/site/flow";
+import { checkoutReturnPath, PAYMENT_CALLBACK_PATH, publicSiteUrl } from "@/lib/site/flow";
 import {
   attachProviderRef,
   checkSlug,
@@ -24,6 +24,8 @@ const bodySchema = z.object({
 /**
  * Starts checkout for a draft. Records a pending payment, opens a hosted
  * checkout with the provider and returns its URL. Nothing here publishes.
+ * The price, currency, site and owner all come from the server: the browser
+ * only names the draft and the link it wants.
  */
 export async function POST(request: Request) {
   try {
@@ -56,12 +58,14 @@ export async function POST(request: Request) {
       siteId,
       uid: user.uid,
       email: user.email,
+      customerName: user.name,
       businessName: content.business.name,
       publicUrl: publicSiteUrl(slug),
       amountSen: PRICE_SEN,
       currency: "myr",
       successUrl: `${publicEnv.siteUrl}${checkoutReturnPath(siteId)}`,
       cancelUrl: `${publicEnv.siteUrl}/s/${siteId}/publish?cancelled=1`,
+      callbackUrl: `${publicEnv.siteUrl}${PAYMENT_CALLBACK_PATH}`,
     });
     await attachProviderRef(paymentId, session.providerRef);
     return NextResponse.json({ url: session.url });

@@ -84,11 +84,16 @@ export interface PaymentDoc {
   slug: string;
   amountSen: number;
   currency: "myr";
-  provider: "stripe" | "mock";
-  /** Provider's checkout/session id. */
+  provider: "billplz" | "stripe" | "mock";
+  /** Provider's checkout id (Billplz bill id, Stripe session id). */
   providerRef: string | null;
   status: PaymentStatus;
   failureReason: string | null;
+  /**
+   * Set when this payment was confirmed for a site another payment had already
+   * published. The money was taken, so it is recorded as paid and needs a refund.
+   */
+  duplicate?: boolean;
   createdAt: Timestamp;
   paidAt: Timestamp | null;
   updatedAt: Timestamp;

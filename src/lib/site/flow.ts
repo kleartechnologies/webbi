@@ -57,7 +57,13 @@ export function hasUnpublishedChanges(site: Site): boolean {
   return stable(site.draft) !== stable(site.published);
 }
 
-/** Checkout return URL. `{CHECKOUT_SESSION_ID}` is filled in by the provider. */
+/**
+ * Where checkout sends the customer back. No query string: each payment adapter
+ * appends its own (Stripe's session_id template, Billplz's signed billplz[…] params).
+ */
 export function checkoutReturnPath(siteId: string): string {
-  return `/s/${siteId}/publish/return?session_id={CHECKOUT_SESSION_ID}`;
+  return `/s/${siteId}/publish/return`;
 }
+
+/** Server endpoint payment providers call to confirm a payment (Billplz callback_url). */
+export const PAYMENT_CALLBACK_PATH = "/api/payments/webhook";

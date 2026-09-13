@@ -3,6 +3,7 @@ import { Timestamp } from "firebase/firestore";
 import {
   checkoutReturnPath,
   hasUnpublishedChanges,
+  PAYMENT_CALLBACK_PATH,
   publicSiteUrl,
   resumePath,
   siteHost,
@@ -72,7 +73,9 @@ describe("urls", () => {
   it("builds public URLs from NEXT_PUBLIC_SITE_URL", () => {
     expect(siteHost()).toBe("webbi.my");
     expect(publicSiteUrl("hafiz-proton")).toBe("https://webbi.my/w/hafiz-proton");
-    expect(checkoutReturnPath("site1")).toBe("/s/site1/publish/return?session_id={CHECKOUT_SESSION_ID}");
+    // No query string: each payment adapter appends its own (Stripe's session_id, Billplz's signed billplz[…]).
+    expect(checkoutReturnPath("site1")).toBe("/s/site1/publish/return");
+    expect(PAYMENT_CALLBACK_PATH).toBe("/api/payments/webhook");
   });
 
   it("names a site from the draft, then the understanding, then a fallback", () => {

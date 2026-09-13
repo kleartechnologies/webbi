@@ -14,6 +14,8 @@ export interface VerifiedUser {
   uid: string;
   isAnonymous: boolean;
   email?: string;
+  /** Display name from the sign-in, when there is one. Used to address the payment bill. */
+  name?: string;
 }
 
 export class UnauthorizedError extends Error {
@@ -26,6 +28,7 @@ export class UnauthorizedError extends Error {
 interface FirebaseClaims extends JWTPayload {
   firebase?: { sign_in_provider?: string };
   email?: string;
+  name?: string;
 }
 
 /** Emulator tokens are unsigned; accept them only in local development. */
@@ -54,6 +57,7 @@ export async function verifyIdToken(token: string): Promise<VerifiedUser> {
     uid: payload.sub,
     isAnonymous: payload.firebase?.sign_in_provider === "anonymous",
     email: payload.email,
+    name: typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : undefined,
   };
 }
 
