@@ -187,6 +187,20 @@ describe("existing demo sites", () => {
   });
 });
 
+describe("renderer box", () => {
+  it("the site's own sticky layers stay inside the renderer, so a preview can never paint over the app around it", () => {
+    // The sticky CTA is z-20 and the site header z-30. Without `isolate` on the root they
+    // join the host page's stacking context, and on a short phone the preview's CTA covers
+    // the Ready screen's Edit / Publish bar.
+    for (const mode of ["public", "preview"] as const) {
+      const root = html(car(), mode).match(/^<div [^>]*class="([^"]*)"/)?.[1] ?? "";
+      expect(root).toContain("isolate");
+    }
+    // The preview still shows the site's real sticky CTA; it is layered, not removed.
+    expect(html(car(), "preview")).toContain("sticky bottom-0 z-20");
+  });
+});
+
 describe("hero image system", () => {
   it("hero image upload: the cover renders in the hero for a person-led site, never the profile photo as background", () => {
     const site = bare(car());

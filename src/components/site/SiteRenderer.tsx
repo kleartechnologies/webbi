@@ -73,7 +73,9 @@ export function SiteRenderer({ site, mode = "public", stickyCta = true, banner, 
       lang={site.language === "ms" ? "ms" : "en"}
       data-preset={ctx.preset.id}
       className={cn(
-        "@container relative flex w-full flex-col bg-site-ground font-ui text-site-ink antialiased",
+        // `isolate` keeps the site's own layers (its sticky header and CTA bar) inside this box, so a
+        // preview can never paint over the chrome of the app screen it sits on.
+        "@container relative isolate flex w-full flex-col bg-site-ground font-ui text-site-ink antialiased",
         mode === "public" ? "min-h-dvh" : "min-h-full",
         className,
       )}
