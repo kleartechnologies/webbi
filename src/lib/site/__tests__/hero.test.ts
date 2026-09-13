@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CATEGORIES, CATEGORY_IDS } from "../categories";
 import { DEMO_SITES } from "../demo";
-import { HERO_POSITION_CLASS, heroImageOf, heroModeOf, resolveHero } from "../hero";
+import { HERO_BOUNDS, HERO_POSITION_CLASS, heroFrameOf, heroImageOf, heroModeOf, heroShapeOf, imageRatio, resolveHero } from "../hero";
 import { generationInputSchema, siteContentSchema, type SectionOf, type SiteContent } from "../schema";
 
 const COVER = { url: "https://firebasestorage.googleapis.com/v0/b/x/o/cover.webp?alt=media", path: "users/u1/sites/s1/cover.webp", width: 1600, height: 900 };
@@ -42,6 +42,69 @@ describe("hero resolver", () => {
     site.business.heroImagePosition = "top";
     expect(resolveHero(site, heroOf(site)).position).toBe("top");
     expect(HERO_POSITION_CLASS).toEqual({ center: "object-center", top: "object-top", bottom: "object-bottom" });
+  });
+});
+
+describe("hero frame", () => {
+  const frame = (width: number, height: number, mode: "visual" | "person" | "service" | "property") => heroFrameOf({ width, height }, mode);
+
+  it("classifies a cover by its natural width ÷ height", () => {
+    expect(heroShapeOf(3)).toBe("banner");
+    expect(heroShapeOf(2.5)).toBe("banner");
+    expect(heroShapeOf(21 / 9)).toBe("wide");
+    expect(heroShapeOf(16 / 9)).toBe("wide");
+    expect(heroShapeOf(1.6)).toBe("wide");
+    expect(heroShapeOf(3 / 2)).toBe("landscape");
+    expect(heroShapeOf(4 / 3)).toBe("landscape");
+    expect(heroShapeOf(1.1)).toBe("square");
+    expect(heroShapeOf(1)).toBe("square");
+    expect(heroShapeOf(0.9)).toBe("square");
+    expect(heroShapeOf(4 / 5)).toBe("portrait");
+    expect(heroShapeOf(3 / 4)).toBe("portrait");
+    expect(heroShapeOf(2 / 3)).toBe("portrait");
+    expect(heroShapeOf(9 / 16)).toBe("tall");
+    expect(heroShapeOf(0.4)).toBe("tall");
+  });
+
+  it("reads the ratio only from a recorded, sane size", () => {
+    expect(imageRatio({})).toBeUndefined();
+    expect(imageRatio({ width: 0, height: 100 })).toBeUndefined();
+    expect(imageRatio({ width: 1600 })).toBeUndefined();
+    expect(imageRatio({ width: 1600, height: 900 })).toBeCloseTo(16 / 9);
+  });
+
+  it("inside the bounds the frame takes the photo's own ratio, so nothing is cropped", () => {
+    expect(frame(1600, 900, "person")).toMatchObject({ shape: "wide", mobile: "stack", desktop: "overlay", mobileRatio: 16 / 9, desktopRatio: 16 / 9 });
+    // Too wide to carry the copy on a phone, even for a visual hero.
+    expect(frame(1600, 900, "visual").mobile).toBe("stack");
+    expect(frame(1400, 1054, "visual")).toMatchObject({ shape: "landscape", mobile: "stack", desktop: "split", mobileRatio: 1400 / 1054, desktopRatio: 1400 / 1054 });
+    expect(frame(1080, 1080, "visual")).toMatchObject({ shape: "square", mobile: "overlay", desktop: "split", mobileRatio: 1, desktopRatio: 1 });
+    expect(frame(1080, 1080, "person")).toMatchObject({ mobile: "stack", desktop: "split", mobileRatio: 1, desktopRatio: 1 });
+    expect(frame(1080, 1350, "visual")).toMatchObject({ shape: "portrait", mobile: "overlay", desktop: "split", mobileRatio: 0.8, desktopRatio: 0.8 });
+    expect(frame(1080, 1350, "service")).toMatchObject({ mobile: "stack", mobileRatio: 0.8 });
+  });
+
+  it("outside the bounds the crop is the smallest that keeps the hero usable; the desktop split never crops", () => {
+    const tall = frame(1080, 1920, "visual");
+    expect(tall).toMatchObject({ shape: "tall", mobile: "overlay", desktop: "split" });
+    expect(tall.mobileRatio).toBeCloseTo(HERO_BOUNDS.mobileOverlay.min);
+    expect(tall.desktopRatio).toBeCloseTo(9 / 16);
+    expect(frame(1080, 1920, "property").mobileRatio).toBeCloseTo(HERO_BOUNDS.mobileStack.min);
+    expect(frame(3000, 1000, "service")).toMatchObject({ shape: "banner", mobile: "stack", desktop: "overlay", mobileRatio: HERO_BOUNDS.mobileStack.max, desktopRatio: 3 });
+    expect(frame(4000, 1000, "visual").desktopRatio).toBe(HERO_BOUNDS.desktopOverlay.max);
+    // 16:10 is exactly the floor of the full-width backdrop; anything squarer sits beside the copy.
+    expect(frame(1600, 1000, "visual").desktop).toBe("overlay");
+    expect(frame(1500, 1000, "visual").desktop).toBe("split");
+  });
+
+  it("a photo without a recorded size is framed as the recommended 16:9, and resolveHero carries a frame exactly when it has an image", () => {
+    expect(heroFrameOf({}, "visual")).toMatchObject({ ratio: undefined, shape: "wide", mobile: "stack", desktop: "overlay", mobileRatio: 16 / 9, desktopRatio: 16 / 9 });
+    const site = car();
+    heroOf(site).image = undefined;
+    site.business.heroImage = undefined;
+    expect(resolveHero(site, heroOf(site)).frame).toBeUndefined();
+    site.business.heroImage = COVER;
+    expect(resolveHero(site, heroOf(site)).frame).toMatchObject({ shape: "wide", ratio: 16 / 9, mobile: "stack", desktop: "overlay" });
   });
 });
 

@@ -38,6 +38,18 @@ const footerHtml = (out: string) => out.slice(out.indexOf("<footer"));
 const count = (out: string, needle: string) =>
   needle.endsWith(".webp") ? (out.match(new RegExp(`<img[^>]*${needle.replace(".", "[.]")}`, "g"))?.length ?? 0) : out.split(needle).length - 1;
 const COVER_KEY = "cover.webp";
+const SQUARE = { ...COVER, width: 1080, height: 1080 };
+const TALL = { ...COVER, width: 1080, height: 1920 };
+const BANNER = { ...COVER, width: 3000, height: 1000 };
+const shapeOf = (h: string) => h.match(/data-hero-shape="([a-z]+)"/)?.[1];
+const layoutOf = (h: string) => h.match(/data-hero-layout="([a-z/]+)"/)?.[1];
+/** The frame's aspect ratios on phones and on desktop, as the CSS variables the markup carries. */
+const ratiosOf = (h: string) => ({ mobile: Number(h.match(/--hero-ratio-m:([\d.]+)/)?.[1]), desktop: Number(h.match(/--hero-ratio-d:([\d.]+)/)?.[1]) });
+const coverImg = (h: string) => h.match(/<img[^>]*cover\.webp[^>]*>/)?.[0] ?? "";
+/** Class lists of the readability fades over the photo (each says on which breakpoint it shows). */
+const fadesOf = (h: string) => [...h.matchAll(/<div aria-hidden="true" class="absolute inset-0 ?([^"]*)"/g)].map((m) => m[1]);
+const frameClassOf = (h: string) => h.match(/<div class="([^"]*aspect-\(--hero-ratio-m\)[^"]*)"/)?.[1] ?? "";
+
 const LOGO_KEY = "logo.webp";
 const PHOTO_KEY = "amir.webp";
 /** Sites without any uploaded imagery at all, as a brand-new customer's would be. */
@@ -281,44 +293,133 @@ describe("hero image system", () => {
     expect(modeOf(html(contractor))).toBe("service");
   });
 
-  it("mobile hero: 16:10 cover with object-fit and the chosen focus; desktop: 4:3 beside the copy", () => {
+  it("the owner's focus edge stays on the cover image itself, centre by default", () => {
     const site = bare(car());
     site.business.heroImage = COVER;
-    let hero = heroHtml(html(site));
-    expect(hero).toContain("aspect-[16/10]");
-    expect(hero).toContain("@3xl:aspect-[4/3]");
-    expect(hero).toContain("@3xl:grid-cols-[1.1fr_1fr]");
-    expect(hero).toMatch(/<img[^>]*object-cover[^>]*object-center/);
+    expect(coverImg(heroHtml(html(site)))).toContain("object-center");
     site.business.heroImagePosition = "top";
-    hero = heroHtml(html(site));
-    expect(hero).toMatch(/<img[^>]*object-cover[^>]*object-top/);
-    expect(hero).not.toContain("object-center");
+    let img = coverImg(heroHtml(html(site)));
+    expect(img).toContain("object-top");
+    expect(img).not.toContain("object-center");
     site.business.heroImagePosition = "bottom";
-    expect(heroHtml(html(site))).toMatch(/<img[^>]*object-bottom/);
+    img = coverImg(heroHtml(html(site)));
+    expect(img).toContain("object-bottom");
+    expect(img).toContain("object-cover");
   });
 
-  it("desktop hero for a visual site: full-bleed 4:5 on mobile becomes a fixed-height banner on wide screens", () => {
-    const site = bare(restaurant());
-    site.business.heroImage = COVER;
-    site.business.heroImagePosition = "bottom";
+  it("wide 16:9 cover: the whole photo full-bleed above the copy on phones, the full-width backdrop behind it on desktop", () => {
+    for (const site of [bare(car()), bare(restaurant())]) {
+      site.business.heroImage = COVER;
+      const hero = heroHtml(html(site));
+      expect(shapeOf(hero)).toBe("wide");
+      expect(layoutOf(hero)).toBe("stack/overlay");
+      expect(ratiosOf(hero).mobile).toBeCloseTo(16 / 9);
+      expect(ratiosOf(hero).desktop).toBeCloseTo(16 / 9);
+      expect(hero).toContain('sizes="100vw"');
+      // The readability fade exists only behind the desktop overlay copy; the phone photo is never dimmed.
+      expect(fadesOf(hero)).toEqual(["hidden @3xl:block"]);
+      expect(hero).not.toContain("@3xl:grid-cols-[1fr_1fr]");
+    }
+  });
+
+  it("square cover: shown whole; a visual hero sets its copy over it on phones, other modes stack under it; beside the copy on desktop", () => {
+    const visual = bare(restaurant());
+    visual.business.heroImage = SQUARE;
+    const v = heroHtml(html(visual));
+    expect(shapeOf(v)).toBe("square");
+    expect(layoutOf(v)).toBe("overlay/split");
+    expect(ratiosOf(v)).toEqual({ mobile: 1, desktop: 1 });
+    expect(fadesOf(v)).toEqual(["@3xl:hidden"]);
+    expect(v).toContain("@3xl:grid-cols-[1fr_1fr]");
+    expect(v).toContain("@3xl:max-w-[calc(min(72svh,640px)*var(--hero-ratio-d))]");
+    expect(v).toContain('sizes="(max-width: 768px) 100vw, 640px"');
+    const person = bare(car());
+    person.business.heroImage = SQUARE;
+    person.business.profilePhoto = PHOTO;
+    const p = heroHtml(html(person));
+    expect(layoutOf(p)).toBe("stack/split");
+    expect(fadesOf(p)).toEqual([]);
+    expect(p).toContain("rounded-full");
+  });
+
+  it("tall 9:16 cover: never a screen-long hero on phones (2:3 under the copy, 3:4 stacked), the focus edge decides the crop; whole beside the copy on desktop", () => {
+    const visual = bare(restaurant());
+    visual.business.heroImage = TALL;
+    visual.business.heroImagePosition = "top";
+    const v = heroHtml(html(visual));
+    expect(shapeOf(v)).toBe("tall");
+    expect(layoutOf(v)).toBe("overlay/split");
+    expect(ratiosOf(v).mobile).toBeCloseTo(2 / 3);
+    expect(ratiosOf(v).desktop).toBeCloseTo(9 / 16);
+    expect(coverImg(v)).toContain("object-top");
+    const person = bare(car());
+    person.business.heroImage = TALL;
+    const p = heroHtml(html(person));
+    expect(layoutOf(p)).toBe("stack/split");
+    expect(ratiosOf(p).mobile).toBeCloseTo(3 / 4);
+    expect(ratiosOf(p).desktop).toBeCloseTo(9 / 16);
+  });
+
+  it("banner 3:1 cover: a full-width strip on desktop, trimmed to 2:1 on phones", () => {
+    const site = bare(structuredClone(DEMO_SITES.sejuktech));
+    site.business.heroImage = BANNER;
     const hero = heroHtml(html(site));
-    expect(hero).toContain("aspect-[4/5]");
-    expect(hero).toContain("@3xl:h-[560px]");
-    expect(hero).toMatch(/<img[^>]*object-bottom/);
-    expect(hero).toContain("sizes=");
+    expect(modeOf(hero)).toBe("service");
+    expect(shapeOf(hero)).toBe("banner");
+    expect(layoutOf(hero)).toBe("stack/overlay");
+    expect(ratiosOf(hero)).toEqual({ mobile: 2, desktop: 3 });
   });
 
-  it("public and preview renderers receive the same hero image, focus and mode", () => {
+  it("a cover whose size was never recorded is laid out as the recommended 16:9, never as a broken frame", () => {
     const site = bare(car());
-    site.business.heroImage = COVER;
-    site.business.heroImagePosition = "top";
-    site.business.profilePhoto = PHOTO;
-    const pub = heroHtml(html(site, "public"));
-    const pre = heroHtml(html(site, "preview"));
-    const img = (h: string) => h.match(/<img[^>]*cover\.webp[^>]*>/)?.[0];
-    expect(img(pub)).toBeDefined();
-    expect(img(pre)).toBe(img(pub));
-    expect(modeOf(pre)).toBe(modeOf(pub));
+    site.business.heroImage = { url: COVER.url, path: COVER.path };
+    const hero = heroHtml(html(site));
+    expect(shapeOf(hero)).toBe("wide");
+    expect(layoutOf(hero)).toBe("stack/overlay");
+    expect(ratiosOf(hero).mobile).toBeCloseTo(16 / 9);
+    expect(hero).not.toContain("NaN");
+    expect(hero).not.toContain("undefined");
+  });
+
+  it("every category × shape: the cover once, one CTA in the hero and none repeated under it, the height caps that keep the hero on the first screen", () => {
+    const categories = ["restaurant", "car", "property", "beauty", "homeServices", "photographer"] as const;
+    for (const category of categories) {
+      for (const image of [COVER, SQUARE, TALL, BANNER]) {
+        const site = bare(car());
+        site.business.category = category;
+        site.business.heroImage = image;
+        const out = html(site);
+        expect(count(out, "data-hero-cta")).toBe(1);
+        const hero = heroHtml(out);
+        expect(count(hero, COVER_KEY)).toBe(1);
+        expect(hero).toContain("max-h-[min(88svh,760px)]");
+        expect(hero).toContain("@3xl:max-h-[min(72svh,640px)]");
+        expect(hero).toContain("aspect-(--hero-ratio-m)");
+        expect(hero).toContain("@3xl:aspect-(--hero-ratio-d)");
+        // The photo starts in the first grid row on both breakpoints. `row-span-*`
+        // is the grid-row shorthand and resets the start, so without these the
+        // desktop backdrop falls under the copy instead of sitting behind it.
+        const frameClass = frameClassOf(hero);
+        expect(frameClass).toContain("row-start-1");
+        expect(frameClass).toContain("@3xl:row-start-1");
+      }
+    }
+  });
+
+  it("public and preview renderers receive the same hero image, focus, frame and mode for every shape", () => {
+    for (const image of [COVER, SQUARE, TALL, BANNER]) {
+      const site = bare(car());
+      site.business.heroImage = image;
+      site.business.heroImagePosition = "top";
+      site.business.profilePhoto = PHOTO;
+      const pub = heroHtml(html(site, "public"));
+      const pre = heroHtml(html(site, "preview"));
+      expect(coverImg(pub)).not.toBe("");
+      expect(coverImg(pre)).toBe(coverImg(pub));
+      expect(modeOf(pre)).toBe(modeOf(pub));
+      expect(layoutOf(pre)).toBe(layoutOf(pub));
+      expect(ratiosOf(pre)).toEqual(ratiosOf(pub));
+    }
   });
 });
 

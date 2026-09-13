@@ -147,6 +147,8 @@ const heroFacts = (page) =>
     const box = hero?.getBoundingClientRect();
     return {
       mode: hero?.getAttribute("data-hero-mode") ?? null,
+      shape: hero?.getAttribute("data-hero-shape") ?? null,
+      layout: hero?.getAttribute("data-hero-layout") ?? null,
       img: img ? { loaded: img.complete && img.naturalWidth > 0, w: Math.round(r.width), h: Math.round(r.height), fit: getComputedStyle(img).objectFit, pos: getComputedStyle(img).objectPosition, alt: img.getAttribute("alt") } : null,
       heroHeight: Math.round(box?.height ?? 0),
       cta: Boolean(document.querySelector("[data-hero-cta] a")),
@@ -372,8 +374,9 @@ const profileFacts = (page) =>
     publicHero = h;
     expect(h.mode === "person", `public hero mode ${h.mode}`);
     expect(h.img?.loaded && h.img.fit === "cover" && /top|0%/.test(h.img.pos), `public cover ${JSON.stringify(h.img)}`);
-    // 16:10 crop at 390px wide: roughly 350×219 (page gutters), never the full 640×360 image height.
-    expect(h.img.w >= 300 && h.img.w <= 390 && Math.abs(h.img.h - h.img.w * 0.625) < 4, `mobile cover crop ${h.img.w}×${h.img.h}`);
+    // A 16:9 cover is shown whole on a phone: full-bleed (390 wide) at its own ratio, the copy stacked under it.
+    expect(Math.abs(h.img.w - h.width) <= 2 && Math.abs(h.img.h - h.img.w / (16 / 9)) < 3, `mobile cover ${h.img.w}×${h.img.h} at ${h.width}px wide`);
+    expect(h.shape === "wide" && h.layout === "stack/overlay", `hero frame ${h.shape} ${h.layout}`);
     expect(h.cta, "public hero CTA missing");
     expectSocials(h, CAR_SOCIAL_URLS, aboutId());
     expect(h.emptySrc === 0 && !h.overflow, "empty img or overflow on public mobile");
@@ -393,10 +396,10 @@ const profileFacts = (page) =>
       expect(h.img.alt === publicHero.img.alt, `${name} hero image differs from mobile`);
       expectSocials(h, CAR_SOCIAL_URLS, aboutId());
       expect(!h.overflow && h.broken === 0, `${name}: overflow ${h.overflow}, broken ${h.broken}`);
-      if (name === "desktop") {
-        // Side-by-side at @3xl: the cover sits beside the copy, 4:3, not full width.
-        expect(h.img.w < 700 && h.img.w > 380 && Math.abs(h.img.h - h.img.w * 0.75) < 4, `desktop cover crop ${h.img.w}×${h.img.h}`);
-      }
+      // A wide cover is the full-width backdrop at @3xl, its height between the 420px floor and the 640px/72svh cap
+      // (so at 1280 wide the 16:9 photo is capped at 640 and the owner's "top" focus keeps the upper part).
+      expect(Math.abs(h.img.w - h.width) <= 2 && h.img.h >= 420 && h.img.h <= 660, `${name} cover ${h.img.w}×${h.img.h} at ${h.width}px wide`);
+      expect(h.layout === "stack/overlay" && /top|0%/.test(h.img.pos), `${name} hero frame ${h.layout}, focus ${h.img.pos}`);
       const loc = await locationFacts(visitor);
       expect(loc.href === MAPS_HREF && loc.iframeSrc, `${name} location mismatch`);
       await visitor.screenshot({ path: path.join(shots, `p12-public-${name}.png`), fullPage: true });

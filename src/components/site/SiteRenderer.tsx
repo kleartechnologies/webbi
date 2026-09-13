@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 import { presetStyle } from "@/lib/site/presets";
 import type { Section as SiteSection, SiteContent } from "@/lib/site/schema";
 import { buildCtx, buildNav, type RenderCtx, type RenderMode } from "./context";
-import { Hero, heroIncludesCta } from "./Hero";
+import { Hero } from "./Hero";
 import { PrimaryCta, QuickNav } from "./HeroActions";
 import { SiteFooter } from "./SiteFooter";
 import { SiteHeader } from "./SiteHeader";
@@ -65,7 +65,8 @@ export function SiteRenderer({ site, mode = "public", stickyCta = true, banner, 
   const nav = buildNav(ctx);
   const sections = site.sections.filter((s) => s.enabled);
   const hero = sections.find((s) => s.type === "hero");
-  const ctaInHero = hero?.type === "hero" ? heroIncludesCta(ctx, hero) : ctx.preset.heroDark;
+  /** Every hero renders its own buttons; only a site with the hero switched off needs the button under it. */
+  const ctaInHero = Boolean(hero) || ctx.preset.heroDark;
 
   return (
     <div

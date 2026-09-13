@@ -55,7 +55,7 @@ const COPY: Record<ImageFieldKind, Copy> = {
     help: "Make your website instantly feel like your business.",
     spec: "Recommended: 1600 × 900 px (16:9)",
     foot: "JPG or PNG • Landscape works best • Max 5 MB",
-    note: "Keep important text, logos and faces near the centre — the image may be cropped on mobile.",
+    note: "Any shape works — the hero adapts to your photo on phones and desktops. Keep faces and text away from the very edges.",
     add: "Upload cover photo",
     icon: "add_a_photo",
   },

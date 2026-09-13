@@ -22,7 +22,20 @@ const chrome = process.env.QA_CHROME || "/Applications/Google Chrome.app/Content
 const shots = path.join(path.dirname(fileURLToPath(import.meta.url)), "shots");
 mkdirSync(shots, { recursive: true });
 const avatar = writeAvatarPng(path.join(shots, "qa-avatar.png"));
-const cover = writeCoverPng(path.join(shots, "qa-cover.png"));
+/**
+ * One cover per shape the hero system tells apart; each industry with a cover uploads a
+ * different one, so the ready preview is checked for wide, square, tall and banner photos.
+ * Expectations (frame ratios, layouts) follow src/lib/site/hero.ts: inside the frame bounds
+ * the frame takes the photo's own ratio (no crop); tall photos are trimmed on phones and
+ * banners on phones, never on desktop where the split layout shows the whole photo.
+ */
+const COVERS = {
+  wide: { w: 1600, h: 900, shape: "wide", desktopRatio: 16 / 9 },
+  square: { w: 1080, h: 1080, shape: "square", desktopRatio: 1 },
+  tall: { w: 1080, h: 1920, shape: "tall", desktopRatio: 9 / 16 },
+  banner: { w: 2400, h: 800, shape: "banner", desktopRatio: 3 },
+};
+for (const [key, c] of Object.entries(COVERS)) c.file = writeCoverPng(path.join(shots, `qa-cover-${key}.png`), c.w, c.h);
 const logoPng = writeLogoPng(path.join(shots, "qa-logo.png"));
 
 const INDUSTRIES = [
@@ -33,6 +46,8 @@ const INDUSTRIES = [
     heroMode: "visual",
     logo: true,
     hero: true,
+    cover: { ...COVERS.wide, layout: "stack/overlay", mobileRatio: 16 / 9, mobileCrop: "shown whole" },
+    desktop: true,
     socials: { instagram: "@warungmaknah", facebook: "https://www.facebook.com/warungmaknah" },
     expectSocials: { instagram: "https://www.instagram.com/warungmaknah/", facebook: "https://www.facebook.com/warungmaknah" },
     description:
@@ -49,6 +64,7 @@ const INDUSTRIES = [
     profilePhoto: true,
     heroMode: "person",
     hero: true,
+    cover: { ...COVERS.square, layout: "stack/split", mobileRatio: 1, mobileCrop: "shown whole" },
     desktop: true,
     socials: { instagram: "@amir.perodua", tiktok: "@amir.perodua" },
     expectSocials: { instagram: "https://www.instagram.com/amir.perodua/", tiktok: "https://www.tiktok.com/@amir.perodua" },
@@ -70,6 +86,8 @@ Saya cover kawasan Balakong, Cheras, Kajang dan Seri Kembangan.`,
     heroMode: "property",
     profilePhoto: true,
     hero: true,
+    cover: { ...COVERS.tall, layout: "stack/split", mobileRatio: 3 / 4, mobileCrop: "trimmed to 3:4 so the copy stays on the first screen" },
+    desktop: true,
     socials: { instagram: "https://instagram.com/sarahlim.homes", facebook: "sarahlimhomes", tiktok: "https://www.tiktok.com/@sarahlim.homes" },
     expectSocials: { instagram: "https://www.instagram.com/sarahlim.homes/", facebook: "https://www.facebook.com/sarahlimhomes", tiktok: "https://www.tiktok.com/@sarahlim.homes" },
     description:
@@ -82,6 +100,8 @@ Saya cover kawasan Balakong, Cheras, Kajang dan Seri Kembangan.`,
     heroMode: "service",
     logo: true,
     hero: true,
+    cover: { ...COVERS.banner, layout: "stack/overlay", mobileRatio: 2, mobileCrop: "trimmed to 2:1 so it is not a sliver" },
+    desktop: true,
     socials: { facebook: "ZulRenovation", tiktok: "zul.renovation" },
     expectSocials: { facebook: "https://www.facebook.com/ZulRenovation", tiktok: "https://www.tiktok.com/@zul.renovation" },
     description:
@@ -112,6 +132,10 @@ const browser = await puppeteer.launch({
   args: ["--no-sandbox", "--hide-scrollbars", "--disable-features=BackForwardCache"],
 });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+/** Rendered frame ratio within rounding of the expected one (frames are measured in whole pixels). */
+const ratioNear = (img, ratio) => Boolean(img) && Math.abs(img.frameW / img.frameH - ratio) < 0.03;
+/** `@3xl:min-h-[420px]` on the desktop overlay frame: the room the copy needs on the photo. */
+const HERO_MIN_H = 420;
 const clickText = async (page, sel, label, exact = false) => {
   for (const el of await page.$$(sel)) {
     const t = (await el.evaluate((e) => e.textContent)).trim();
@@ -241,7 +265,7 @@ for (const industry of selected) {
     if (industry.profilePhoto && fields.profile) { await uploadTo("profile-photo", avatar); entry.profilePhotoUploaded = true; }
     if (industry.logo && fields.logo) { await uploadTo("business-logo", logoPng); entry.logoUploaded = true; }
     if (industry.hero && fields.hero) {
-      await uploadTo("hero-image", cover);
+      await uploadTo("hero-image", industry.cover.file);
       entry.heroUploaded = true;
       const chips = await page.$$eval("[aria-label='Crop focus'] button", (els) => els.map((b) => b.textContent.trim()));
       check(chips.join(",") === "Centre,Top,Bottom", `crop focus chips after cover upload: ${chips.join(",") || "none"}`);
@@ -337,13 +361,23 @@ for (const industry of selected) {
         const hero = document.querySelector("[data-hero-mode]");
         const heroImg = hero?.querySelector("img[data-image=cover]");
         const rect = heroImg?.getBoundingClientRect();
+        // The frame is the cover's parent: its aspect-ratio comes from the photo's own shape.
+        const frame = heroImg?.parentElement?.getBoundingClientRect();
+        const heroBox = hero?.getBoundingClientRect();
+        // The Desktop tab renders the 1100px site inside a scaled wrapper; a px floor has to be scaled with it.
+        const stage = hero?.closest("[style*='scale']");
+        const scale = stage?.offsetWidth ? stage.getBoundingClientRect().width / stage.offsetWidth : 1;
         return {
           mapsHref: link?.getAttribute("href") ?? null,
           placeholder: [...document.querySelectorAll("span")].some((s) => s.textContent.trim() === "Google Maps"),
           headerPhotoAlt: header?.querySelector("img")?.getAttribute("alt") ?? null,
           headerLogo: Boolean(header?.querySelector("[data-logo] img")),
           heroMode: hero?.getAttribute("data-hero-mode") ?? null,
-          heroImg: heroImg ? { loaded: heroImg.complete && heroImg.naturalWidth > 0, w: Math.round(rect.width), h: Math.round(rect.height), fit: getComputedStyle(heroImg).objectFit } : null,
+          heroShape: hero?.getAttribute("data-hero-shape") ?? null,
+          heroLayout: hero?.getAttribute("data-hero-layout") ?? null,
+          heroW: Math.round(heroBox?.width ?? 0),
+          scale,
+          heroImg: heroImg ? { loaded: heroImg.complete && heroImg.naturalWidth > 0, natural: [heroImg.naturalWidth, heroImg.naturalHeight], w: Math.round(rect.width), h: Math.round(rect.height), frameW: Math.round(frame.width), frameH: Math.round(frame.height), ratio: Math.round((frame.width / frame.height) * 1000) / 1000, fit: getComputedStyle(heroImg).objectFit } : null,
           heroCta: Boolean(document.querySelector("[data-hero-cta] a")),
           socials: [...document.querySelectorAll("[data-social] a")].map((a) => ({ href: a.getAttribute("href"), target: a.getAttribute("target"), rel: a.getAttribute("rel"), label: a.getAttribute("aria-label") })),
           socialBlocks: document.querySelectorAll("[data-social]").length,
@@ -362,8 +396,11 @@ for (const industry of selected) {
     if (industry.logo) check(facts.headerLogo, "logo rendered in the site header");
     if (industry.heroMode) check(facts.heroMode === industry.heroMode, `preview hero layout "${facts.heroMode}" (expected ${industry.heroMode})`);
     if (industry.hero) {
+      const c = industry.cover;
       check(Boolean(facts.heroImg?.loaded), `cover photo loaded in the preview hero: ${JSON.stringify(facts.heroImg)}`);
-      check(facts.heroImg?.fit === "cover" && facts.heroImg.w > 200 && facts.heroImg.h > 120, `cover photo cropped with object-fit cover at ${facts.heroImg?.w}×${facts.heroImg?.h}`);
+      check(facts.heroShape === c.shape && facts.heroLayout === c.layout, `${c.w}×${c.h} cover framed as ${facts.heroShape} ${facts.heroLayout} (expected ${c.shape} ${c.layout})`);
+      check(ratioNear(facts.heroImg, c.mobileRatio), `mobile frame ${facts.heroImg?.frameW}×${facts.heroImg?.frameH} keeps ratio ${c.mobileRatio.toFixed(3)} — ${c.mobileCrop}`);
+      check(Math.abs((facts.heroImg?.w ?? 0) - facts.heroW) <= 2, `mobile cover is full-bleed (${facts.heroImg?.w} of ${facts.heroW}px)`);
     } else {
       check(!facts.heroImg || facts.heroImg.loaded, "no broken hero image on a site without a cover photo");
     }
@@ -391,7 +428,17 @@ for (const industry of selected) {
       const d = await previewFacts();
       entry.previewDesktop = d;
       check(d.heroMode === industry.heroMode, `desktop preview hero layout "${d.heroMode}"`);
-      if (industry.hero) check(Boolean(d.heroImg?.loaded) && d.heroImg.fit === "cover", `desktop cover photo loaded: ${JSON.stringify(d.heroImg)}`);
+      if (industry.hero) {
+        const c = industry.cover;
+        check(Boolean(d.heroImg?.loaded), `desktop cover photo loaded: ${JSON.stringify(d.heroImg)}`);
+        // The full-width backdrop is never shorter than the copy laid over it (min-h-[420px]), so on a
+        // narrow desktop a very wide banner loses a little height; every other shape is shown whole.
+        const floor = c.layout.endsWith("overlay") ? HERO_MIN_H * d.scale : 0;
+        const wantH = Math.max((d.heroImg?.frameW ?? 0) / c.desktopRatio, floor);
+        check(d.heroLayout === c.layout && Math.abs((d.heroImg?.frameH ?? 0) - wantH) <= 3, `desktop frame ${d.heroImg?.frameW}×${d.heroImg?.frameH} is ${Math.round(wantH)}px tall: ${c.desktopRatio.toFixed(3)} ${floor && wantH > (d.heroImg?.frameW ?? 0) / c.desktopRatio ? "trimmed to the copy's height" : "whole"} (${d.heroLayout})`);
+        if (c.layout.endsWith("overlay")) check(Math.abs((d.heroImg?.w ?? 0) - d.heroW) <= 2, `desktop cover is the full-width backdrop (${d.heroImg?.w} of ${d.heroW}px)`);
+        else check((d.heroImg?.w ?? 0) < d.heroW * 0.6 && (d.heroImg?.w ?? 0) > d.heroW * 0.2, `desktop cover sits whole beside the copy (${d.heroImg?.w} of ${d.heroW}px)`);
+      }
       check(d.socials.length === expectedSocials.length, `desktop preview has ${d.socials.length} social icon(s)`);
       check(d.broken === 0, `${d.broken} broken image(s) in the desktop preview`);
       await page.screenshot({ path: path.join(shots, `industry-${industry.key}-desktop.png`), fullPage: true });
