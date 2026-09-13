@@ -1,16 +1,21 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState, type Ref } from "react";
 import { Button, ButtonLink, Icon, type IconName } from "@/components/ui";
 import { PRICE_LABEL } from "@/lib/env";
 import { formatEdited } from "@/lib/format";
-import { hasUnpublishedChanges, publicSitePath, publicSiteUrl, resumePath, siteHost, siteName } from "@/lib/site/flow";
+import { hasUnpublishedChanges, publicSitePath, resumePath, siteHost, siteName } from "@/lib/site/flow";
 import { PRESETS, presetStyle } from "@/lib/site/presets";
+import { shareTarget } from "@/lib/site/share";
 import { slugify } from "@/lib/site/slug";
 import { deleteDraftSite } from "@/lib/site/store";
 import { resolveTemplateId } from "@/lib/site/templates";
 import type { Site } from "@/lib/site/types";
+
+// The dialog and the QR library load only when the owner opens Share.
+const ShareDialog = dynamic(() => import("./ShareDialog").then((m) => m.ShareDialog), { ssr: false });
 
 function ActionTile({
   icon,
@@ -18,12 +23,16 @@ function ActionTile({
   href,
   onClick,
   external,
+  buttonRef,
+  hasDialog,
 }: {
   icon: IconName;
   label: string;
   href?: string;
   onClick?: () => void;
   external?: boolean;
+  buttonRef?: Ref<HTMLButtonElement>;
+  hasDialog?: boolean;
 }) {
   const className =
     "flex flex-col items-center gap-1.5 rounded-input bg-ground px-1 py-3 text-[11px] font-bold text-ink hover:bg-[#EDEBE5]";
@@ -48,7 +57,7 @@ function ActionTile({
     );
   }
   return (
-    <button type="button" onClick={onClick} className={className}>
+    <button type="button" ref={buttonRef} onClick={onClick} aria-haspopup={hasDialog ? "dialog" : undefined} className={className}>
       {inner}
     </button>
   );
@@ -87,26 +96,12 @@ function SiteBanner({ site }: { site: Site }) {
 export function SiteCard({ site }: { site: Site }) {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const shareButton = useRef<HTMLButtonElement>(null);
   const name = siteName(site);
   const published = site.status === "published" && site.slug;
-  const url = site.slug ? publicSiteUrl(site.slug) : null;
+  const target = shareTarget(site);
   const displayUrl = site.slug ? `${siteHost()}${publicSitePath(site.slug)}` : `${siteHost()}/w/${slugify(name) || "your-business"}`;
-
-  const share = async () => {
-    if (!url) return;
-    if (typeof navigator !== "undefined" && navigator.share) {
-      try {
-        await navigator.share({ title: name, url });
-        return;
-      } catch {
-        /* user cancelled */
-      }
-    }
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
-  };
 
   return (
     <article className="overflow-hidden rounded-panel border border-line bg-surface shadow-raised">
@@ -133,7 +128,9 @@ export function SiteCard({ site }: { site: Site }) {
           <div className="grid grid-cols-3 gap-2">
             <ActionTile icon="open_in_new" label="View" href={publicSitePath(site.slug as string)} external />
             <ActionTile icon="edit" label="Edit" href={`/s/${site.id}/edit`} />
-            <ActionTile icon={copied ? "check" : "ios_share"} label={copied ? "Copied" : "Share"} onClick={share} />
+            {target && (
+              <ActionTile icon="ios_share" label="Share" onClick={() => setSharing(true)} buttonRef={shareButton} hasDialog />
+            )}
           </div>
         ) : confirming ? (
           <div className="flex flex-col gap-2 rounded-input bg-danger-tint p-3">
@@ -175,6 +172,15 @@ export function SiteCard({ site }: { site: Site }) {
           )}
         </div>
       </div>
+      {sharing && target && (
+        <ShareDialog
+          target={target}
+          onClose={() => {
+            setSharing(false);
+            shareButton.current?.focus();
+          }}
+        />
+      )}
     </article>
   );
 }
