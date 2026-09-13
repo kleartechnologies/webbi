@@ -102,7 +102,7 @@ export const BUSINESSES: ShowcaseBusiness[] = [
       { icon: "visibility", title: "Lashes", line: "Classic & volume" },
       { icon: "brush", title: "Brows", line: "Shape & tint" },
     ],
-    photo: { src: "/showcase/beauty.jpg", position: "60% 50%" },
+    photo: { src: "/showcase/beauty-facial.jpg", position: "40% 50%" },
   },
   {
     slug: "sejuktech",
@@ -119,7 +119,7 @@ export const BUSINESSES: ShowcaseBusiness[] = [
       { icon: "construction", title: "Repair", line: "Fast & reliable" },
       { icon: "home_repair_service", title: "Installation", line: "New units" },
     ],
-    photo: { src: "/showcase/aircond.jpg", position: "68% 38%" },
+    photo: { src: "/showcase/aircond-technician.jpg", position: "45% 50%" },
   },
   {
     slug: "studio-dua",
@@ -170,7 +170,7 @@ export const BUSINESSES: ShowcaseBusiness[] = [
       { icon: "sell", title: "Set lengkap", line: "Mudah dipadankan" },
       { icon: "near_me", title: "Pos seluruh Malaysia", line: "Mudah & selamat" },
     ],
-    photo: { src: "/showcase/boutique.jpg", position: "88% 45%" },
+    photo: { src: "/showcase/boutique-rack.jpg", position: "50% 40%" },
     tint: 1,
   },
   {

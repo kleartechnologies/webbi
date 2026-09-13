@@ -3,8 +3,8 @@ import type { SiteContent } from "./schema";
 /**
  * Example Webbis shown on the landing page and served at /w/{slug} with an
  * "example" banner. They are ordinary Site JSON — the same renderer, the same
- * schema — so they double as fixtures for the renderer. Photos are CC0 (see
- * the CREDITS.txt file in each public/demo folder). The numbers are placeholders, not real lines.
+ * schema — so they double as fixtures for the renderer. Photos are CC0, Unsplash
+ * or Pexels licensed (see the CREDITS.txt file in each public/demo folder). The numbers are placeholders, not real lines.
  */
 const DEMO_NUMBER = "60123456789";
 
@@ -127,6 +127,7 @@ const hafizRahman: SiteContent = {
       headline: "Your next Proton, sorted.",
       subheadline: "Best deals on the X50, X70, S70 and Saga. Trade-in, loan and delivery, all arranged for you.",
       badge: "Proton Sales Advisor · Shah Alam",
+      image: { url: "/demo/hafiz-rahman/car.jpg", alt: "Grey SUV parked on an open road", width: 1400, height: 928 },
     },
     {
       id: "models",
@@ -136,11 +137,11 @@ const hafizRahman: SiteContent = {
       title: "Models",
       note: "Prices are on-the-road estimates. Message me for this month's rebates.",
       items: [
-        { id: "c1", name: "Proton X50", price: "From RM 86,300", tag: "Best seller", description: "1.5L turbo SUV. The one everyone asks for." },
-        { id: "c2", name: "Proton X70", price: "From RM 98,800", description: "Family SUV with more space and a quieter cabin." },
-        { id: "c3", name: "Proton S70", price: "From RM 73,800", tag: "New", description: "Sedan with SUV features. Great for daily drives." },
-        { id: "c4", name: "Proton Saga", price: "From RM 34,800", description: "Malaysia's favourite first car. Low monthly." },
-        { id: "c5", name: "Proton X90", price: "From RM 123,800", description: "7-seater with mild hybrid. Ideal for big families." },
+        { id: "c1", name: "Proton X50", price: "From RM 86,300", tag: "Best seller", description: "1.5L turbo SUV. The one everyone asks for.", image: { url: "/demo/hafiz-rahman/suv-red-side.jpg", alt: "Red compact SUV parked by a hillside road", width: 1200, height: 900 } },
+        { id: "c2", name: "Proton X70", price: "From RM 98,800", description: "Family SUV with more space and a quieter cabin.", image: { url: "/demo/hafiz-rahman/suv-black-side.jpg", alt: "Black SUV parked in front of a white wall", width: 1200, height: 900 } },
+        { id: "c3", name: "Proton S70", price: "From RM 73,800", tag: "New", description: "Sedan with SUV features. Great for daily drives.", image: { url: "/demo/hafiz-rahman/sedan-grey-side.jpg", alt: "Grey sedan parked on a countryside road", width: 1200, height: 900 } },
+        { id: "c4", name: "Proton Saga", price: "From RM 34,800", description: "Malaysia's favourite first car. Low monthly.", image: { url: "/demo/hafiz-rahman/sedan-white.jpg", alt: "White compact sedan parked by an open road", width: 1200, height: 900 } },
+        { id: "c5", name: "Proton X90", price: "From RM 123,800", description: "7-seater with mild hybrid. Ideal for big families.", image: { url: "/demo/hafiz-rahman/suv-white-side.jpg", alt: "White seven-seat SUV parked beside an industrial building", width: 1200, height: 900 } },
       ],
     },
     {
@@ -221,6 +222,7 @@ const sereni: SiteContent = {
       headline: "Slow down. Glow up.",
       subheadline: "A calm, women-only studio in Bangsar for facials, lash extensions and brows.",
       badge: "Bangsar · Women-only studio",
+      image: { url: "/demo/sereni/facial.jpg", alt: "Serum applied during a facial treatment", width: 1400, height: 934 },
     },
     {
       id: "treatments",
@@ -312,6 +314,7 @@ const sejukTech: SiteContent = {
       headline: "Aircond tak sejuk? We come today.",
       subheadline: "Service, repair and installation across the Klang Valley. Fixed prices, no surprise charges.",
       badge: "Klang Valley · Same-day service",
+      image: { url: "/demo/sejuktech/aircond-service.jpg", alt: "Technician checking an air conditioner unit with a gauge", width: 1400, height: 995 },
     },
     {
       id: "services",

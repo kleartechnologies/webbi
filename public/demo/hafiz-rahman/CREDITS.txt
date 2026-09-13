@@ -1,0 +1,7 @@
+Demo photos for the "Hafiz Rahman" example site. The model cards use generic cars, not the Proton models named.
+car.jpg  https://unsplash.com/photos/a-gray-suv-sits-on-a-road-under-a-cloudy-sky-xqXaDbhNqEA  Egor Litvinov, Unsplash License
+suv-red-side.jpg  https://www.pexels.com/photo/a-side-view-of-a-parked-red-vehicle-13767773/  Erik Mclean, Pexels License
+suv-black-side.jpg  https://www.pexels.com/photo/black-subaru-forester-car-19868893/  Ayyeee Ayyeee, Pexels License
+sedan-grey-side.jpg  https://www.pexels.com/photo/skoda-superb-on-the-road-with-a-countryside-landscape-in-the-background-15194849/  Emrah AYVALI, Pexels License
+sedan-white.jpg  https://www.pexels.com/photo/white-car-on-the-roadside-9544521/  Malen Almonacid Trossi, Pexels License
+suv-white-side.jpg  https://www.pexels.com/photo/side-view-of-a-parked-white-suv-4909544/  Andrey Andname, Pexels License

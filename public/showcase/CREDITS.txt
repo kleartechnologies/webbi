@@ -1,8 +1,8 @@
 car.jpg, https://unsplash.com/photos/a-gray-suv-sits-on-a-road-under-a-cloudy-sky-xqXaDbhNqEA, Egor Litvinov, Unsplash License
 tutor.jpg, https://www.pexels.com/photo/teacher-standing-beside-a-blackboard-8617757/, Yan Krukau, Pexels License
-beauty.jpg, https://www.pexels.com/photo/woman-having-facial-care-3738349/, Polina Tankilevitch, Pexels License
-aircond.jpg, https://www.pexels.com/photo/wall-mounted-air-conditioner-in-modern-interior-38788452/, NEOSiAM 18+, Pexels License
+beauty-facial.jpg, https://www.pexels.com/photo/woman-doing-a-treatment-at-beautician-19242406/, Fall Fall, Pexels License
+aircond-technician.jpg, https://www.pexels.com/photo/man-checking-an-air-conditioner-5463575/, José Andrés Pacheco Cortes, Pexels License
 wedding.jpg, https://www.pexels.com/photo/photoshoot-of-a-groom-and-bride-13377371/, Tran Long (Trần Long), Pexels License
 tehtarik.jpg, https://www.pexels.com/photo/milk-tea-on-a-glass-cup-13377433/, Amir Shrestha, Pexels License
-boutique.jpg, https://www.pexels.com/photo/green-plant-inside-a-store-8386651/, Ron Lach, Pexels License
+boutique-rack.jpg, https://www.pexels.com/photo/collection-of-female-clothes-on-rack-in-boutique-4947543/, Maria Orlova, Pexels License
 accounting.jpg, https://www.pexels.com/photo/a-laptop-near-the-plant-and-documents-on-the-table-5520296/, Pavel Danilyuk, Pexels License

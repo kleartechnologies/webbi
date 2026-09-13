@@ -193,7 +193,8 @@ describe("renderer box", () => {
     // join the host page's stacking context, and on a short phone the preview's CTA covers
     // the Ready screen's Edit / Publish bar.
     for (const mode of ["public", "preview"] as const) {
-      const root = html(car(), mode).match(/^<div [^>]*class="([^"]*)"/)?.[1] ?? "";
+      // A hero photo marked priority hoists its preload <link> ahead of the root.
+      const root = html(car(), mode).match(/^(?:<link [^>]*>)*<div [^>]*class="([^"]*)"/)?.[1] ?? "";
       expect(root).toContain("isolate");
     }
     // The preview still shows the site's real sticky CTA; it is layered, not removed.
