@@ -6,7 +6,7 @@ import { Band, Eyebrow, Heading, Inner } from "./Section";
 
 const LINES: [IconName, string][] = [
   ["edit", "Rewrite any heading, price or paragraph."],
-  ["add_a_photo", "Swap photos — Webbi crops and fits them."],
+  ["add_a_photo", "Swap photos. Webbi crops and fits them."],
   ["palette", "Change the style and accent colour."],
   ["tune", "Turn sections on or off, and reword the button."],
 ];

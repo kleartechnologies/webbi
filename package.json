@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "qa:auth": "node scripts/qa/auth-flow.mjs",
+    "qa:landing": "node scripts/qa/landing.mjs",
     "qa:publish": "node scripts/qa/publish-flow.mjs",
     "qa:industries": "node scripts/qa/industries.mjs",
     "qa:profile-location": "node scripts/qa/profile-location.mjs",

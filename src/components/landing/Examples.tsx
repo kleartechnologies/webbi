@@ -15,9 +15,9 @@ import { SitePreview } from "./SitePreview";
 
 /** Three of the shipped example Webbis; each is a real site the renderer serves at /w/[slug]. */
 const TABS: { slug: string; label: string; icon: IconName; caption: string }[] = [
-  { slug: "rasa-kampung", label: "Restaurant & F&B", icon: "restaurant_menu", caption: "Rasa Kampung — menu, hours, location and an order button." },
-  { slug: "hafiz-rahman", label: "Car sales advisor", icon: "directions_car", caption: "Hafiz Rahman — advisor profile, models, FAQ and a test-drive button." },
-  { slug: "sereni", label: "Beauty & wellness", icon: "spa", caption: "Sereni — services, price list, reviews and a booking button." },
+  { slug: "rasa-kampung", label: "Restaurant & F&B", icon: "restaurant_menu", caption: "Rasa Kampung: menu, hours, location and an order button." },
+  { slug: "hafiz-rahman", label: "Car sales advisor", icon: "directions_car", caption: "Hafiz Rahman: advisor profile, models, FAQ and a test-drive button." },
+  { slug: "sereni", label: "Beauty & wellness", icon: "spa", caption: "Sereni: services, price list, reviews and a booking button." },
 ];
 
 export function Examples() {

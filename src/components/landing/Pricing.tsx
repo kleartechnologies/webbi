@@ -4,8 +4,8 @@ import { CreateCta } from "./Cta";
 import { HOST, vars } from "./content";
 import { Band, Eyebrow, Heading, Inner } from "./Section";
 
-const STEPS = ["Describe your business — no account needed", "Preview and edit the real website, free", "Pay once, pick your link, go live"];
-const INCLUDED = ["Create your website", "Customize it", `Publish it on ${HOST}`];
+const STEPS = ["Sign up and describe your business", "Preview and edit the real website, free", "Pay once, pick your link, go live"];
+const INCLUDED = ["Create your website", "Customise it", `Publish it on ${HOST}`];
 
 export function Pricing() {
   return (
@@ -15,7 +15,7 @@ export function Pricing() {
           <Eyebrow className="text-ink/60">Pricing</Eyebrow>
           <Heading className="leading-[1.0]">One price. One website. Yours.</Heading>
           <p className="max-w-[40ch] text-[17px] leading-[1.5] text-ink/78">
-            Free to create and preview. Pay once when you are ready to go live — no subscription, no renewal, ever.
+            See it free. Pay to go live. No subscription, no renewal, ever.
           </p>
           <ol className="flex flex-col gap-[10px] text-[15px] font-semibold">
             {STEPS.map((step, i) => (

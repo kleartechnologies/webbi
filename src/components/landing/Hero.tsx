@@ -13,17 +13,13 @@ export function Hero() {
 
       <div className="relative mx-auto grid w-full max-w-[1180px] grid-cols-[repeat(auto-fit,minmax(300px,1fr))] items-center gap-[clamp(28px,4vw,56px)]">
         <div className="flex max-w-[600px] flex-col items-start gap-[22px]">
-          <span className="inline-flex h-[34px] items-center gap-[7px] rounded-pill bg-white/14 px-[14px] text-[13px] font-semibold">
-            <Icon name="auto_awesome" size={17} className="text-sun" />
-            AI websites for Malaysian businesses
-          </span>
           <h1 className="font-display text-[clamp(42px,7.2vw,86px)] font-extrabold leading-[0.96] tracking-[-0.045em] text-sun">
             Tell us what you do.
             <br />
             <span className="text-white">We&apos;ll build your website.</span>
           </h1>
           <p className="max-w-[34ch] text-[clamp(17px,2vw,21px)] leading-[1.45] text-white/88">
-            Professional websites for businesses, creators and salespeople — without the hassle.
+            Professional websites for businesses, creators and salespeople. No hassle.
           </p>
           <div className="flex flex-wrap gap-3">
             <CreateCta />

@@ -90,7 +90,7 @@ export function MagicMoment() {
     <Band z={2} className="bg-ground">
       <Inner className="flex flex-col gap-9">
         <div className="lp-reveal flex max-w-[760px] flex-col gap-3">
-          <Eyebrow className="text-blue">The magic bit</Eyebrow>
+          <Eyebrow className="text-blue">Watch it happen</Eyebrow>
           <Heading className="text-ink">
             One description.
             <br />
@@ -139,7 +139,7 @@ export function MagicMoment() {
               <span className="rounded-pill bg-sun px-[13px] py-[7px] text-[13px] font-bold text-ink">Warm style</span>
             </div>
             <div className="mt-auto flex flex-col gap-3 transition-opacity duration-500" style={at(3)}>
-              <p className="text-[13px] leading-[1.5] text-white/75">Menu, about, hours, location, reviews and your WhatsApp button — written and laid out for you.</p>
+              <p className="text-[13px] leading-[1.5] text-white/75">Menu, about, hours, location, reviews and your WhatsApp button. All written and laid out for you.</p>
               <span className="flex items-center gap-[6px] text-[13px] font-bold text-sun">
                 <Icon name="check_circle" size={18} fill />
                 Website ready

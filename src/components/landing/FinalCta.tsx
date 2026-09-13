@@ -18,7 +18,7 @@ export function FinalCta() {
             <span className="text-white">We&apos;ll take it from here.</span>
           </h2>
           <p className="max-w-[34ch] text-[clamp(16px,1.8vw,20px)] leading-[1.45] text-white/85">
-            Your website is closer than you think — about as long as it takes to describe your business.
+            It takes about as long as telling a friend what you do.
           </p>
           <div className="flex flex-wrap gap-3">
             <CreateCta />

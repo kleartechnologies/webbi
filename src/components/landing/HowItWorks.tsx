@@ -17,7 +17,7 @@ export function HowItWorks() {
       <Inner className="flex flex-col gap-9">
         <div className="lp-reveal flex max-w-[760px] flex-col gap-3">
           <Eyebrow className="text-blue">How Webbi works</Eyebrow>
-          <Heading>From idea to website in minutes.</Heading>
+          <Heading>Four steps, and you&apos;re live.</Heading>
         </div>
 
         <div className="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-[18px]">
@@ -29,7 +29,7 @@ export function HowItWorks() {
               <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted">What do you do?</span>
               <p className="text-[13px] leading-[1.45] text-ink">Nasi lemak shop in Kajang, open from 7am…</p>
               <span className="inline-flex h-8 w-fit items-center gap-[6px] rounded-pill bg-navy px-3 text-[12px] font-bold text-white">
-                <Icon name="auto_awesome" size={15} />
+                <Icon name="arrow_forward" size={15} />
                 Build my website
               </span>
             </div>
@@ -38,7 +38,7 @@ export function HowItWorks() {
           <article className={`${CARD} bg-surface`} style={vars({ "--lp-delay": "80ms" })}>
             <span className={`${NUM} text-blue`}>02</span>
             <h3 className={TITLE}>Webbi builds your website</h3>
-            <p className={`${BODY} text-muted`}>Copy, sections, prices and layout — assembled for your kind of business.</p>
+            <p className={`${BODY} text-muted`}>Copy, sections, prices and layout. Assembled for your kind of business.</p>
             <ul className="mt-auto flex flex-col gap-[9px] rounded-[16px] bg-ground p-[14px] text-[13px] font-semibold text-ink">
               {BUILD_STEPS.map((step, i) => (
                 <li key={step} className="flex items-center gap-[9px]">
