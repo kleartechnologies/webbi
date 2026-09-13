@@ -10,8 +10,8 @@ import { PRESETS } from "@/lib/site/presets";
 import { resolveTemplateId } from "@/lib/site/templates";
 import { BrowserChrome } from "./BrowserChrome";
 import { HOST } from "./content";
-import { ExampleRail } from "./ExampleRail";
 import { Band, Eyebrow, Heading } from "./Section";
+import { BusinessShowcase } from "./showcase/BusinessShowcase";
 import { SitePreview } from "./SitePreview";
 
 /** Three of the shipped example Webbis; each is a real site the renderer serves at /w/[slug]. */
@@ -81,7 +81,7 @@ export function Examples() {
         </div>
       </div>
 
-      <ExampleRail />
+      <BusinessShowcase />
     </Band>
   );
 }
