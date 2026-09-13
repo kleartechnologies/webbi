@@ -3,23 +3,30 @@ import { z } from "zod";
 import { handleApiError } from "@/lib/api/http";
 import { requireUser } from "@/lib/auth/verify";
 import { deleteSiteImages } from "@/lib/images/storage";
-import { deleteDraftSite, SITE_ID } from "@/lib/site/drafts";
+import { getPaymentProvider, isPaymentConfigured } from "@/lib/payments";
+import { SITE_ID, deleteDraftSite } from "@/lib/site/drafts";
+import { settleOpenCheckouts } from "@/lib/site/publish";
 
 export const runtime = "nodejs";
-export const maxDuration = 15;
+export const maxDuration = 30;
 
 const bodySchema = z.object({ siteId: z.string().regex(SITE_ID) });
 
-/** Deletes the owner's unpaid draft, frees their unpublished-website slot, then removes the draft's photos. */
+/**
+ * Deletes the caller's own unpaid draft and frees their unpublished-website
+ * slot. Open checkouts are checked with the provider first, so a payment made
+ * a moment ago publishes the website instead of being deleted with it. A site
+ * with a paid payment, or a live site, is never deleted here.
+ */
 export async function POST(request: Request) {
   try {
     const user = await requireUser(request);
     const { siteId } = bodySchema.parse(await request.json().catch(() => null));
+    await settleOpenCheckouts(isPaymentConfigured() ? getPaymentProvider() : null, siteId, user.uid);
     await deleteDraftSite(user.uid, siteId);
     try {
       await deleteSiteImages(user.uid, siteId);
     } catch (error) {
-      // The draft is already gone and stays gone; its files are left behind (see README).
       console.error("[images] deleted draft's photos not removed", error);
     }
     return NextResponse.json({ deleted: true });

@@ -3,7 +3,7 @@ import { FieldValue, type Transaction } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase/admin";
 import { PublishError } from "./publish";
 import type { Understanding } from "./schema";
-import type { SiteDoc, UserQuotaDoc } from "./types";
+import type { PaymentDoc, SiteDoc, UserQuotaDoc } from "./types";
 
 /**
  * Starting and deleting drafts (Admin SDK, server only).
@@ -152,7 +152,14 @@ export async function createDraftSite(uid: string, input: NewDraftInput): Promis
   return outcome.siteId;
 }
 
-/** Deletes an owner's unpaid draft and frees its slot. The day's creation count is untouched. */
+/**
+ * Deletes an owner's unpaid draft and frees its slot. The day's creation count is untouched.
+ *
+ * Refused while any payment for the site is paid (its website is owed). A checkout
+ * still open is closed on Webbi's side as failed ("site_deleted"); if the customer
+ * pays it anyway, fulfilment records that payment as paid + needsAttention for a refund.
+ * The delete route asks the provider about open checkouts before calling this.
+ */
 export async function deleteDraftSite(uid: string, siteId: string): Promise<void> {
   const db = adminDb();
   const siteRef = db.doc(`sites/${siteId}`);
@@ -163,6 +170,22 @@ export async function deleteDraftSite(uid: string, siteId: string): Promise<void
     if (!site || site.ownerUid !== uid) throw new PublishError("not_found", "We couldn't find that website.");
     if (site.status !== "draft" || site.paid) {
       throw new PublishError("conflict", "This Webbi is paid for, so it can't be deleted.");
+    }
+    // Read inside the transaction, so a payment confirmed meanwhile retries this and is seen.
+    const payments = (await tx.get(db.collection("payments").where("siteId", "==", siteId))).docs.filter(
+      (doc) => (doc.data() as PaymentDoc).ownerUid === uid,
+    );
+    if (payments.some((doc) => (doc.data() as PaymentDoc).status === "paid")) {
+      throw new PublishError(
+        "conflict",
+        "We've received a payment for this Webbi, so it can't be deleted. It will go live once it's published.",
+      );
+    }
+    const now = FieldValue.serverTimestamp();
+    for (const doc of payments) {
+      if ((doc.data() as PaymentDoc).status === "pending") {
+        tx.update(doc.ref, { status: "failed", failureReason: "site_deleted", updatedAt: now });
+      }
     }
     tx.delete(siteRef);
     // The draft's AI counts and lock go with it. The account's own AI counts stay.

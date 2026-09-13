@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button, Icon, Toggle } from "@/components/ui";
+import { ApiError } from "@/lib/api/client";
 import { cn } from "@/lib/cn";
 import { publicSitePath, siteHost } from "@/lib/site/flow";
 import { LANGUAGES, type Language, type SiteContent } from "@/lib/site/schema";
@@ -43,7 +44,8 @@ export function SettingsTab({ site, draft, update }: Props) {
       router.replace("/dashboard");
     } catch (error) {
       console.error(error);
-      setDeleteError("Couldn't delete this Webbi. Try again.");
+      // A refusal (a payment is in, or couldn't be checked) says why; anything else stays generic.
+      setDeleteError(error instanceof ApiError && error.status === 409 ? error.message : "Couldn't delete this Webbi. Try again.");
       setDeleting(false);
     }
   };

@@ -50,6 +50,8 @@ export type PaymentVerification =
        * found through providerRef (Billplz callbacks don't echo references).
        */
       paymentId: string | null;
+      /** Our site id when the provider hands it back (Billplz reference_2 on bills read from the API). */
+      siteId?: string;
       amountSen: number;
       currency: string;
       paidAt: Date;

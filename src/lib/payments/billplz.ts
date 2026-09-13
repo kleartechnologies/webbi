@@ -128,6 +128,8 @@ interface Bill {
   paidAt: Date | null;
   /** Our payment id. Present on bills read from the API; callbacks don't carry it. */
   paymentId: string | null;
+  /** Our site id (reference_2). Same as paymentId: API reads only. */
+  siteId: string | null;
 }
 
 /** Billplz sends "2018-09-27 15:15:09 +0800"; spell it out so every runtime parses it the same. */
@@ -157,6 +159,7 @@ function billFromJson(json: Record<string, unknown>): Bill {
     paidAmountSen: toInt(json.paid_amount),
     paidAt: parseBillplzDate(typeof json.paid_at === "string" ? json.paid_at : null),
     paymentId: typeof json.reference_1 === "string" && json.reference_1 ? json.reference_1 : null,
+    siteId: typeof json.reference_2 === "string" && json.reference_2 ? json.reference_2 : null,
   };
 }
 
@@ -170,6 +173,7 @@ function billFromCallback(body: URLSearchParams): Bill {
     paidAmountSen: toInt(body.get("paid_amount")),
     paidAt: parseBillplzDate(body.get("paid_at")),
     paymentId: body.get("reference_1") || null,
+    siteId: body.get("reference_2") || null,
   };
 }
 
@@ -183,6 +187,7 @@ export function billVerification(bill: Bill): PaymentVerification {
       state: "paid",
       providerRef: bill.id,
       paymentId: bill.paymentId,
+      ...(bill.siteId ? { siteId: bill.siteId } : {}),
       // Billplz collections are ringgit only. paid_amount is what was actually
       // collected; fulfilment compares it with the price on our own record.
       amountSen: bill.paidAmountSen || bill.amountSen,

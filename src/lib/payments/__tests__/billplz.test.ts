@@ -310,6 +310,7 @@ describe("verifyCheckout", () => {
       state: "paid",
       providerRef: BILL,
       paymentId: "pay_123",
+      siteId: "site_abc",
       amountSen: 14990,
       currency: "myr",
       paidAt: new Date("2026-09-13T02:15:09.000Z"),

@@ -350,22 +350,19 @@ describe("one unpublished website per account", () => {
     expect((await create(owner)).status).toBe(409);
   });
 
-  it("keeps the slot when publishing is refused after payment (wrong amount, broken draft)", async () => {
-    const owner = person();
-    const siteId = await readyDraft(owner);
+  it("keeps the slot when a payment can't publish (wrong amount, broken draft)", async () => {
+    for (const problem of ["amount_mismatch", "invalid_draft"] as const) {
+      const owner = person();
+      const siteId = await readyDraft(owner);
+      const bill = await openBill(owner, siteId);
+      if (problem === "invalid_draft") db.patch(`sites/${siteId}`, { draft: { nonsense: true } });
+      pay(bill, problem === "amount_mismatch" ? 100 : undefined);
+      expect((await postCallback(bill)).body).toMatchObject({ received: true, published: false, needsAttention: true });
 
-    const short = await openBill(owner, siteId);
-    pay(short, 100);
-    expect((await postCallback(short)).body).toMatchObject({ received: true, refused: "bad_request" });
-
-    const broken = await openBill(owner, siteId);
-    db.patch(`sites/${siteId}`, { draft: { nonsense: true } });
-    pay(broken);
-    expect((await postCallback(broken)).body).toMatchObject({ received: true, refused: "bad_request" });
-
-    expect(site(siteId)).toMatchObject({ status: "draft", paid: false, slug: null });
-    expect(quota(owner.uid)?.openDraftSiteId).toBe(siteId);
-    expect((await create(owner)).status).toBe(409);
+      expect(site(siteId)).toMatchObject({ status: "draft", paid: false, slug: null });
+      expect(quota(owner.uid)?.openDraftSiteId).toBe(siteId);
+      expect((await create(owner)).status).toBe(409);
+    }
   });
 
   it("doesn't touch the lock when a later edit of a live website is republished or paid twice", async () => {

@@ -7,10 +7,16 @@ import { getPaymentProvider } from "@/lib/payments";
 import { checkoutReturnPath, PAYMENT_CALLBACK_PATH, publicSiteUrl } from "@/lib/site/flow";
 import {
   attachProviderRef,
+  attentionMessage,
+  awaitsFulfilment,
   checkSlug,
   createPendingPayment,
   getOwnedSite,
   publishableContent,
+  retryPaymentFulfilment,
+  reuseOpenCheckout,
+  sitePayments,
+  type FulfilResult,
 } from "@/lib/site/publish";
 
 export const runtime = "nodejs";
@@ -21,11 +27,24 @@ const bodySchema = z.object({
   slug: z.string().trim().toLowerCase().min(1).max(60),
 });
 
+/** A payment that's already in: send the owner to their live website, or say why it isn't live. */
+function afterPayment(siteId: string, result: FulfilResult) {
+  if (result.slug && (!result.needsAttention || result.duplicate)) {
+    return NextResponse.json({ url: `/s/${siteId}/live` });
+  }
+  return apiError(409, "conflict", attentionMessage(result.needsAttention));
+}
+
 /**
  * Starts checkout for a draft. Records a pending payment, opens a hosted
- * checkout with the provider and returns its URL. Nothing here publishes.
- * The price, currency, site and owner all come from the server: the browser
- * only names the draft and the link it wants.
+ * checkout with the provider and returns its URL. Nothing here publishes a
+ * payment that isn't already confirmed. The price, currency, site and owner all
+ * come from the server: the browser only names the draft and the link it wants.
+ *
+ * One open checkout per website: when the site already has a paid payment
+ * whose website didn't go live, that payment is published instead (no second
+ * charge); when it has a bill that is still open with the provider, that bill
+ * is reused.
  */
 export async function POST(request: Request) {
   try {
@@ -52,6 +71,14 @@ export async function POST(request: Request) {
       return apiError(409, "conflict", message);
     }
 
+    const payments = await sitePayments(siteId, user.uid);
+    const paid = payments.find(awaitsFulfilment);
+    if (paid) return afterPayment(siteId, await retryPaymentFulfilment(paid.id, { slug }));
+
+    const open = await reuseOpenCheckout(provider, payments, slug);
+    if (open?.kind === "paid") return afterPayment(siteId, open.result);
+    if (open?.kind === "open") return NextResponse.json({ url: open.url });
+
     const paymentId = await createPendingPayment({ siteId, uid: user.uid, slug, provider: provider.name });
     const session = await provider.createCheckout({
       paymentId,
@@ -67,7 +94,7 @@ export async function POST(request: Request) {
       cancelUrl: `${publicEnv.siteUrl}/s/${siteId}/publish?cancelled=1`,
       callbackUrl: `${publicEnv.siteUrl}${PAYMENT_CALLBACK_PATH}`,
     });
-    await attachProviderRef(paymentId, session.providerRef);
+    await attachProviderRef(paymentId, session.providerRef, session.url);
     return NextResponse.json({ url: session.url });
   } catch (error) {
     return handleApiError(error);

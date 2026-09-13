@@ -382,9 +382,13 @@ describe("callback: the signed callback is what publishes", () => {
   it("records a second paid bill for a live website as a duplicate and publishes nothing new", async () => {
     const owner = person();
     seedSite("site-a", owner.uid);
-    // Two tabs: two bills opened for the same draft, and both paid.
+    // Two tabs: two bills opened for the same draft at the same moment, and both paid.
+    // (A second Pay press reuses the open bill, so the second bill is recorded directly.)
     const first = await openBill(owner, "site-a", "kedai-aisyah-a");
-    const second = await openBill(owner, "site-a", "kedai-aisyah-a");
+    const second = { billId: "bill0900", paymentId: "payment-tab-2", bill: { ...first.bill } as Doc };
+    Object.assign(second.bill, { id: second.billId, reference_1: second.paymentId, url: `https://www.billplz.com/bills/${second.billId}` });
+    billplz.bills.set(second.billId, second.bill);
+    db.seed(`payments/${second.paymentId}`, { ...payment(first.paymentId), providerRef: second.billId });
     billplz.pay(first.billId);
     billplz.pay(second.billId);
 
@@ -405,7 +409,7 @@ describe("callback: the signed callback is what publishes", () => {
     expect(logged.some((message) => message.includes("refund"))).toBe(true);
   });
 
-  it("refuses a paid amount that isn't the price, and records it", async () => {
+  it("doesn't publish a paid amount that isn't the price, and keeps the payment for a refund", async () => {
     const owner = person();
     seedSite("site-a", owner.uid);
     const a = await openBill(owner, "site-a", "kedai-aisyah-a");
@@ -413,9 +417,15 @@ describe("callback: the signed callback is what publishes", () => {
 
     expect(await postCallback(callbackBody(a.bill))).toEqual({
       status: 200,
-      body: { received: true, refused: "bad_request" },
+      body: { received: true, slug: null, published: false, needsAttention: true },
     });
-    expect(payment(a.paymentId)).toMatchObject({ status: "failed", failureReason: "amount_mismatch:100:myr" });
+    expect(payment(a.paymentId)).toMatchObject({
+      status: "paid",
+      paidAmountSen: 100,
+      amountSen: 14990,
+      needsAttention: true,
+      attentionReason: "amount_mismatch",
+    });
     expect(site("site-a")).toMatchObject({ status: "draft", paid: false });
     expect(db.ids("publicSites")).toEqual([]);
   });

@@ -30,6 +30,8 @@ export interface SiteDoc {
   /** Snapshot copied to publicSites/{slug} by the server on publish. */
   published: SiteContent | null;
   publishedAt: Timestamp | null;
+  /** The payment that published this site. Missing on sites published before it was recorded. */
+  paymentId?: string | null;
   draft: SiteContent | null;
   sourceDescription: string;
   generation: GenerationState;
@@ -114,8 +116,29 @@ export interface SlugDoc {
 export type PaymentStatus = "pending" | "paid" | "failed";
 
 /**
+ * Why a paid payment hasn't (yet) published its website. Only ever set together
+ * with status "paid": the money is real, so the payment is never marked failed.
+ *  - fulfilment_pending: recorded paid, publishing hasn't finished (normally for milliseconds)
+ *  - invalid_draft / slug_unavailable / fulfilment_error: publishing failed; retryable
+ *  - site_missing / owner_mismatch / amount_mismatch / duplicate: never publishes; refund by hand
+ */
+export type PaymentAttentionReason =
+  | "fulfilment_pending"
+  | "invalid_draft"
+  | "slug_unavailable"
+  | "fulfilment_error"
+  | "site_missing"
+  | "owner_mismatch"
+  | "amount_mismatch"
+  | "duplicate";
+
+/**
  * Firestore document at payments/{paymentId}. Created by the server when a
  * checkout starts; marked paid only after the provider confirms it.
+ *
+ * pending → paid (provider confirmed) → published (fulfilledAt set)
+ * pending → failed (provider says the bill is gone, or its draft was deleted)
+ * paid + needsAttention: money taken, website not live. See PaymentAttentionReason.
  */
 export interface PaymentDoc {
   siteId: string;
@@ -127,8 +150,15 @@ export interface PaymentDoc {
   provider: "billplz" | "stripe" | "mock";
   /** Provider's checkout id (Billplz bill id, Stripe session id). */
   providerRef: string | null;
+  /** The provider's hosted page for this checkout, so an open bill can be reused. */
+  checkoutUrl?: string | null;
   status: PaymentStatus;
   failureReason: string | null;
+  /** What the provider says was collected, recorded when it confirms payment. */
+  paidAmountSen?: number;
+  /** True while a paid payment's website isn't live. Cleared when it publishes. */
+  needsAttention?: boolean;
+  attentionReason?: PaymentAttentionReason | null;
   /**
    * Set when this payment was confirmed for a site another payment had already
    * published. The money was taken, so it is recorded as paid and needs a refund.
@@ -136,5 +166,7 @@ export interface PaymentDoc {
   duplicate?: boolean;
   createdAt: Timestamp;
   paidAt: Timestamp | null;
+  /** When this payment published its website. */
+  fulfilledAt?: Timestamp | null;
   updatedAt: Timestamp;
 }

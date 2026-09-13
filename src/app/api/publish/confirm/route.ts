@@ -3,7 +3,13 @@ import { z } from "zod";
 import { apiError, assertRateLimit, handleApiError } from "@/lib/api/http";
 import { requireUser } from "@/lib/auth/verify";
 import { getPaymentProvider } from "@/lib/payments";
-import { fulfilPayment, getPayment, markPaymentFailed, resolvePaymentId } from "@/lib/site/publish";
+import {
+  attentionMessage,
+  fulfilPayment,
+  getPayment,
+  markPaymentFailed,
+  resolvePaymentId,
+} from "@/lib/site/publish";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -56,7 +62,11 @@ export async function POST(request: Request) {
     switch (verification.state) {
       case "paid": {
         const result = await fulfilPayment(verification);
-        return NextResponse.json({ status: "published", slug: result.slug });
+        if (result.slug && (!result.needsAttention || result.duplicate)) {
+          return NextResponse.json({ status: "published", slug: result.slug });
+        }
+        // Paid, but the website isn't live. Never "failed": the payment is kept for a retry.
+        return apiError(409, "conflict", attentionMessage(result.needsAttention));
       }
       case "pending":
         // The signed redirect already said the bill wasn't paid (cancelled, or the

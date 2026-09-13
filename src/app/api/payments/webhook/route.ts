@@ -12,13 +12,16 @@ export const maxDuration = 30;
  * is rejected with 400 before it is acted on. A verified `paid` is the
  * authoritative path to publishing; the return page is only a fast path to the
  * same idempotent fulfilment, and it asks the provider directly too.
+ *
+ * No sign-in, App Check or rate limit here: the signature is the authentication,
+ * and a repeated callback is harmless.
  */
 export async function POST(request: Request) {
   let provider;
   try {
     provider = getPaymentProvider();
   } catch (error) {
-    if (error instanceof PaymentError) return apiError(503, "payments_not_configured", error.message);
+    if (error instanceof PaymentError) return apiError(503, "payments_not_configured", "Payments aren't configured.");
     throw error;
   }
 
@@ -30,7 +33,7 @@ export async function POST(request: Request) {
     if (error instanceof PaymentError && error.code === "bad_signature") {
       return apiError(400, "bad_request", "Invalid signature.");
     }
-    console.error("[webhook] parse failed", error);
+    console.error("[webhook] parse failed", { error: error instanceof PaymentError ? error.code : "unexpected" });
     return apiError(500, "internal", "Webhook could not be processed.");
   }
   if (!verification) return NextResponse.json({ received: true, ignored: true });
@@ -39,7 +42,13 @@ export async function POST(request: Request) {
     switch (verification.state) {
       case "paid": {
         const result = await fulfilPayment(verification);
-        return NextResponse.json({ received: true, slug: result.slug, published: result.published });
+        return NextResponse.json({
+          received: true,
+          slug: result.slug,
+          published: result.published,
+          // Paid and kept, but not live: logged by fulfilment for a retry or refund.
+          ...(result.needsAttention && !result.duplicate ? { needsAttention: true } : {}),
+        });
       }
       case "failed": {
         const paymentId = await resolvePaymentId(verification);
@@ -51,12 +60,15 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     if (error instanceof PublishError) {
-      // Permanent for this event; retrying won't help. Logged for follow-up.
-      console.error("[webhook] fulfilment refused", verification, error.message);
+      // The bill doesn't map to a Webbi checkout; retrying won't change that. Logged by fulfilment.
+      console.error("[webhook] fulfilment refused", { providerRef: verification.providerRef, code: error.code });
       return NextResponse.json({ received: true, refused: error.code });
     }
-    // Transient (admin not configured, Firestore down): 500 so the provider retries.
-    console.error("[webhook] fulfilment failed", error);
+    // Transient (Firestore unavailable): the payment is already kept as paid; 500 so the callback can come again.
+    console.error("[webhook] fulfilment failed", {
+      providerRef: verification.providerRef,
+      error: error instanceof Error ? error.name : typeof error,
+    });
     return apiError(500, "internal", "Fulfilment failed; will retry.");
   }
 }
