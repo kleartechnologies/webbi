@@ -5,10 +5,8 @@ import { publicSitePath } from "@/lib/site/flow";
 import { PRESETS } from "@/lib/site/presets";
 import { BUSINESSES, isLive, type ShowcaseBusiness } from "./businesses";
 import { DESKTOP, DesktopSite, PHONE, PhoneSite } from "./MiniSite";
+import { FitFrame } from "./FitFrame";
 import { ShowcaseScroller } from "./ShowcaseScroller";
-
-/** Scales a fixed-size drawing to its frame's width (the same CSS trick SitePreview uses). */
-const fit = (width: number): React.CSSProperties => ({ transform: `scale(tan(atan2(100cqw, ${width}px)))` });
 
 /**
  * A desktop and a phone view of one business's site. From lg the laptop view
@@ -18,16 +16,18 @@ const fit = (width: number): React.CSSProperties => ({ transform: `scale(tan(ata
 function Frames({ b }: { b: ShowcaseBusiness }) {
   return (
     <div aria-hidden data-site-preview className="relative aspect-[100/74] lg:aspect-[100/56]">
-      <div className="@container absolute top-0 left-0 aspect-[720/450] w-[86%] overflow-hidden rounded-[10px] shadow-[0_22px_44px_rgba(0,0,0,.4)] transition-transform duration-500 group-hover:-translate-y-1 lg:top-[3%] lg:w-[78%] lg:rounded-[8px]">
-        <div className="absolute top-0 left-0 origin-top-left" style={fit(DESKTOP.width)}>
-          <DesktopSite b={b} />
-        </div>
-      </div>
-      <div className="@container absolute right-0 bottom-0 aspect-[220/452] w-[35%] drop-shadow-[0_18px_28px_rgba(0,0,0,.5)] transition-transform duration-500 group-hover:-translate-y-2 lg:w-[24%]">
-        <div className="absolute top-0 left-0 origin-top-left" style={fit(PHONE.width)}>
-          <PhoneSite b={b} />
-        </div>
-      </div>
+      <FitFrame
+        width={DESKTOP.width}
+        className="absolute top-0 left-0 aspect-[720/450] w-[86%] overflow-hidden rounded-[10px] shadow-[0_22px_44px_rgba(0,0,0,.4)] transition-transform duration-500 group-hover:-translate-y-1 lg:top-[3%] lg:w-[78%] lg:rounded-[8px]"
+      >
+        <DesktopSite b={b} />
+      </FitFrame>
+      <FitFrame
+        width={PHONE.width}
+        className="absolute right-0 bottom-0 aspect-[220/452] w-[35%] drop-shadow-[0_18px_28px_rgba(0,0,0,.5)] transition-transform duration-500 group-hover:-translate-y-2 lg:w-[24%]"
+      >
+        <PhoneSite b={b} />
+      </FitFrame>
     </div>
   );
 }
