@@ -42,6 +42,20 @@ export interface Site extends SiteDoc {
   id: string;
 }
 
+/**
+ * Firestore document at userQuotas/{uid}. Server only: clients can neither read
+ * nor write it. Enforces one unpublished website per account (see drafts.ts).
+ */
+export interface UserQuotaDoc {
+  /** The account's unpublished website, or null once it is published or deleted. */
+  openDraftSiteId: string | null;
+  /** Websites started on draftsDay. Deleting a draft never lowers it. */
+  draftsCreatedToday: number;
+  /** Server calendar day (Asia/Kuala_Lumpur, YYYY-MM-DD) that draftsCreatedToday counts. */
+  draftsDay: string;
+  updatedAt: Timestamp;
+}
+
 /** Firestore document at users/{uid}. */
 export interface UserDoc {
   displayName: string | null;

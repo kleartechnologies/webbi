@@ -6,13 +6,12 @@ import { AppPage } from "@/components/app/AppHeader";
 import { AuthForm, LegalNote, type AuthMode } from "@/components/app/AuthForm";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { Icon, Spinner } from "@/components/ui";
-import type { Handoff } from "@/lib/auth/actions";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { getCategory } from "@/lib/site/categories";
 import { siteHost, siteName } from "@/lib/site/flow";
 import { PRESETS } from "@/lib/site/presets";
 import { slugify } from "@/lib/site/slug";
-import { copySiteToOwner, getSite, subscribeSite } from "@/lib/site/store";
+import { subscribeSite } from "@/lib/site/store";
 import type { Site } from "@/lib/site/types";
 
 /**
@@ -34,16 +33,6 @@ export function AccountView({ siteId }: { siteId: string }) {
   useEffect(() => {
     if (status === "account" && site) router.replace(`/s/${site.id}/publish`);
   }, [status, site, router]);
-
-  // If the guest signs in to an account that already exists, carry the draft over.
-  const handoff: Handoff<Site | null> = {
-    capture: () => getSite(siteId),
-    restore: async (captured, uid) => {
-      if (!captured) return;
-      const newId = await copySiteToOwner(captured, uid);
-      router.replace(`/s/${newId}/publish`);
-    },
-  };
 
   const preset = site
     ? PRESETS[site.draft?.theme.preset ?? getCategory(site.generation?.understanding?.category).preset]
@@ -101,9 +90,10 @@ export function AccountView({ siteId }: { siteId: string }) {
           <AuthForm
             mode={mode}
             onModeChange={setMode}
-            handoff={handoff}
             onSuccess={(result) => {
-              if (!result.switched) router.replace(`/s/${siteId}/publish`);
+              // A guest's draft is no longer copied into an existing account: websites
+              // are started only through the server, one unpublished at a time.
+              router.replace(result.switched ? "/dashboard" : `/s/${siteId}/publish`);
             }}
           />
         </div>

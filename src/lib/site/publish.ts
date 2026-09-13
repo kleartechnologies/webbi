@@ -7,7 +7,7 @@ import type { PaymentProviderName, PaymentVerification } from "@/lib/payments/pr
 import { siteCacheTag } from "./publicStore";
 import { siteContentSchema, type SiteContent } from "./schema";
 import { isReservedSlug, isValidSlug } from "./slug";
-import type { PaymentDoc, SiteDoc, SlugDoc } from "./types";
+import type { PaymentDoc, SiteDoc, SlugDoc, UserQuotaDoc } from "./types";
 
 /**
  * Write side of publishing (Admin SDK, server only).
@@ -194,6 +194,10 @@ export async function fulfilPayment(
     if (site.ownerUid !== payment.ownerUid) {
       throw new PublishError("forbidden", "This payment doesn't belong to that website.");
     }
+    // Read before any write: publishing frees the owner's unpublished-website slot (drafts.ts).
+    const quotaRef = db.doc(`userQuotas/${payment.ownerUid}`);
+    const quotaSnap = await tx.get(quotaRef);
+    const lockedDraftId = (quotaSnap.data() as Partial<UserQuotaDoc> | undefined)?.openDraftSiteId;
 
     // Already done (webhook and return page raced, or a retry).
     if (payment.status === "paid" && site.status === "published" && site.slug) {
@@ -254,6 +258,10 @@ export async function fulfilPayment(
       failureReason: null,
       updatedAt: now,
     });
+    // Only now that the site is live, and only if the lock is this site's.
+    if (lockedDraftId === payment.siteId) {
+      tx.update(quotaRef, { openDraftSiteId: null, updatedAt: now });
+    }
     return { siteId: payment.siteId, slug, published: true };
   });
 

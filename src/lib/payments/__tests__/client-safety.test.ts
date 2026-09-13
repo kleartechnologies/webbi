@@ -114,6 +114,7 @@ describe("Billplz credentials stay on the server", () => {
       "src/lib/payments/stripe.ts",
       "src/lib/payments/mock.ts",
       "src/lib/site/publish.ts",
+      "src/lib/site/drafts.ts",
       "src/lib/api/http.ts",
     ]) {
       expect(SERVER_ONLY.test(read(file)), `${file} must start with import "server-only"`).toBe(true);
@@ -135,7 +136,7 @@ describe("Billplz credentials stay on the server", () => {
       (file) =>
         file.startsWith("src/lib/payments/") ||
         file.startsWith("src/app/api/") ||
-        ["src/lib/site/publish.ts", "src/lib/firebase/admin.ts", "src/lib/api/http.ts"].includes(file),
+        ["src/lib/site/publish.ts", "src/lib/site/drafts.ts", "src/lib/firebase/admin.ts", "src/lib/api/http.ts"].includes(file),
     );
     expect(serverModules).toEqual([]);
     expect(modules.filter((file) => CODE.test(file) && SERVER_ONLY.test(read(file)))).toEqual([]);

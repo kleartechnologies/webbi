@@ -5,6 +5,7 @@ import { UnauthorizedError } from "@/lib/auth/verify";
 import { AiError } from "@/lib/ai/errors";
 import { AdminNotConfiguredError } from "@/lib/firebase/admin";
 import { PaymentError } from "@/lib/payments/provider";
+import { DraftLimitError } from "@/lib/site/drafts";
 import { PublishError } from "@/lib/site/publish";
 
 export type ApiErrorCode =
@@ -21,8 +22,8 @@ export type ApiErrorCode =
   | "admin_not_configured"
   | "internal";
 
-export function apiError(status: number, code: ApiErrorCode, message: string) {
-  return NextResponse.json({ error: { code, message } }, { status });
+export function apiError(status: number, code: ApiErrorCode, message: string, extra?: Record<string, unknown>) {
+  return NextResponse.json({ error: { code, message, ...extra } }, { status });
 }
 
 /** Maps thrown errors to a consistent JSON error body. */
@@ -35,6 +36,10 @@ export function handleApiError(error: unknown) {
     if (error.code === "ai_not_configured") return apiError(503, "ai_not_configured", error.message);
     if (error.code === "rate_limited") return apiError(429, "rate_limited", error.message);
     return apiError(502, "ai_failed", error.message);
+  }
+  if (error instanceof DraftLimitError) {
+    if (error.code === "daily_limit") return apiError(429, "rate_limited", error.message);
+    return apiError(409, "conflict", error.message, { existingSiteId: error.existingSiteId });
   }
   if (error instanceof PublishError) {
     const status = { not_found: 404, forbidden: 403, conflict: 409, bad_request: 400 }[error.code];

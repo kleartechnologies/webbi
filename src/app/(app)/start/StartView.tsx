@@ -2,15 +2,19 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppPage } from "@/components/app/AppHeader";
 import { CenteredWordmark, FooterNote, StickyFooter } from "@/components/app/FlowChrome";
 import { RequireAuth } from "@/components/app/RequireAuth";
-import { Button, ErrorText, Icon, Textarea } from "@/components/ui";
-import { callApi, errorMessage } from "@/lib/api/client";
+import { Button, ButtonLink, ErrorText, Icon, Textarea } from "@/components/ui";
+import { ApiError, callApi, errorMessage } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { resumePath } from "@/lib/site/flow";
 import type { Understanding } from "@/lib/site/schema";
-import { createSite } from "@/lib/site/store";
+import { createSite, getSite, subscribeUserSites } from "@/lib/site/store";
+
+const IN_PROGRESS = "You already have a website in progress. Finish or publish it before creating another website.";
+const DAILY_LIMIT = "You've reached today's website creation limit. Please try again tomorrow.";
 
 const EXAMPLES = [
   "Saya buka kedai makan di Kajang, jual nasi lemak dan lauk kampung. Customer biasa order ikut WhatsApp.",
@@ -37,11 +41,26 @@ function Start() {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Where to continue the website already in progress. A hint only: the server enforces the limit. */
+  const [inProgress, setInProgress] = useState<string | null>(null);
   const empty = !text.trim();
+  const uid = user?.uid;
+
+  useEffect(() => {
+    if (!uid) return;
+    return subscribeUserSites(
+      uid,
+      (sites) => {
+        const open = sites.find((site) => site.status !== "published");
+        setInProgress(open ? resumePath(open) : null);
+      },
+      () => setInProgress(null),
+    );
+  }, [uid]);
 
   const submit = async () => {
     const description = text.trim();
-    if (!user) return;
+    if (!user || inProgress) return;
     if (description.length < 12) {
       setError("Tell us a bit more. One or two sentences is enough.");
       return;
@@ -50,15 +69,17 @@ function Start() {
     setError(null);
     try {
       const { understanding } = await callApi<{ understanding: Understanding }>("/api/ai/understand", { description });
-      const siteId = await createSite({
-        ownerUid: user.uid,
-        sourceDescription: description,
-        language: understanding.language,
-        generation: { status: "understood", understanding },
-      });
+      const siteId = await createSite({ sourceDescription: description, understanding });
       router.push(`/s/${siteId}/confirm`);
     } catch (err) {
-      setError(errorMessage(err));
+      if (err instanceof ApiError && err.status === 409) {
+        const existingId = typeof err.details.existingSiteId === "string" ? err.details.existingSiteId : null;
+        const existing = existingId ? await getSite(existingId).catch(() => null) : null;
+        setInProgress(existing ? resumePath(existing) : "/dashboard");
+        setError(null);
+      } else {
+        setError(err instanceof ApiError && err.status === 429 ? DAILY_LIMIT : errorMessage(err));
+      }
       setBusy(false);
     }
   };
@@ -90,6 +111,14 @@ function Start() {
           />
           {error ? <ErrorText>{error}</ErrorText> : null}
         </div>
+        {inProgress ? (
+          <div className="flex flex-col gap-3 rounded-input border border-line bg-surface p-4" role="status">
+            <p className="text-[14px] leading-[1.45] text-ink">{IN_PROGRESS}</p>
+            <ButtonLink href={inProgress} size="sm" icon="arrow_forward" iconPosition="right">
+              Continue my website
+            </ButtonLink>
+          </div>
+        ) : null}
         <div className="flex flex-col gap-2">
           <span className="text-[12px] font-bold uppercase tracking-[0.06em] text-muted">Try an example</span>
           <div className="flex flex-col gap-[6px]">
@@ -117,8 +146,8 @@ function Start() {
           icon="arrow_forward"
           loading={busy}
           onClick={submit}
-          aria-disabled={empty || undefined}
-          className={empty ? "opacity-45" : undefined}
+          aria-disabled={empty || Boolean(inProgress) || undefined}
+          className={empty || inProgress ? "opacity-45" : undefined}
         >
           {busy ? "Reading your description…" : "Continue"}
         </Button>

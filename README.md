@@ -59,18 +59,20 @@ One Next.js app serves everything. Each customer website is a validated JSON doc
 | `/s/{siteId}/account` → `/publish` → `/publish/return` → `/live` | Sign in (guest sites are kept), choose slug, pay, confirm, share |
 | `/dashboard`, `/signin` | Owner's sites and sign-in |
 | `/w/{slug}` | Public renderer. Reads `publicSites/{slug}` (cached, invalidated on publish) or a built-in demo site |
+| `/api/sites`, `/api/sites/delete` | Start a website (one unpublished website per account, 3 starts a day) and delete an unpaid draft |
 | `/api/ai/understand`, `/api/ai/generate` | Server-only AI calls (the OpenAI key never reaches the browser) |
 | `/api/publish/slug`, `/checkout`, `/confirm`, `/republish` | Slug availability, Billplz bill creation, return-page payment confirmation, push edits to a paid site |
 | `/api/payments/webhook` | Billplz payment callback (X Signature verified) |
 
-Sessions are anonymous-first: a visitor can build and preview a site as a Firebase anonymous user, and the account created at Publish links to that same user, so nothing is lost.
+Starting a website needs a signed-in account (not a guest). `POST /api/sites` runs one Admin SDK transaction on `userQuotas/{uid}`: it refuses with 409 while the account has an unpublished site (pending, failed or unpaid payments included) and with 429 after 3 starts in the current Malaysia day. Publishing (a verified payment) or deleting the draft frees the slot; deleting never gives back a start. Accounts that already had several drafts before this limit keep all of them untouched; their oldest draft (by `createdAt`) is treated as the one in progress until it is published or deleted.
 
 Firestore collections (rules in `firestore.rules`):
 
 | Collection | Who can read / write | Contents |
 | --- | --- | --- |
 | `users/{uid}` | owner | profile |
-| `sites/{siteId}` | owner reads; owner may update only `draft`, `sourceDescription`, `generation`, `language`, `updatedAt` | draft content, flow status, `slug`/`paid`/`published` (server-only) |
+| `sites/{siteId}` | owner reads; owner may update only `draft`, `sourceDescription`, `generation`, `language`, `updatedAt`; create and delete are server-only (`/api/sites`) | draft content, flow status, `slug`/`paid`/`published` (server-only) |
+| `userQuotas/{uid}` | server-only | `openDraftSiteId` (the account's one unpublished website) and `draftsCreatedToday` / `draftsDay` (Malaysia calendar day) |
 | `publicSites/{slug}` | world-readable, server-only writes | the published copy of a site, plus `siteId` (never the owner) |
 | `slugs/{slug}` | server-only | slug → siteId reservation, claimed inside the payment transaction |
 | `payments/{id}` | owner reads, server-only writes | one record per checkout: provider, amount, status |
@@ -120,7 +122,8 @@ Owners can push later edits to a paid site with **Publish changes** in the edito
 ## Tests and QA
 
 ```bash
-npm test          # unit tests (vitest): slug rules, flow resume logic, schema, phone/link helpers, env parsing, Billplz payments
+npm test          # unit tests (vitest): slug rules, flow resume logic, schema, phone/link helpers, env parsing, Billplz payments, website limits
+npm run test:rules  # Firestore rules + real-transaction race test against the Firestore emulator (needs Java and the firebase CLI)
 npm run lint
 npx tsc --noEmit
 npm run build

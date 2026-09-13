@@ -5,9 +5,14 @@ rules_version = '2';
 // Collections
 //   users/{uid}         – minimal profile, owner only.
 //   sites/{siteId}      – one document per website. Owner reads it and may edit
-//                         the draft content. Status, slug, payment and the
-//                         published copy are written only by the server
-//                         (Admin SDK) after verified payment.
+//                         the draft content. Websites are created and deleted
+//                         only by the server (POST /api/sites, /api/sites/delete),
+//                         which allows one unpublished website per account.
+//                         Status, slug, payment and the published copy are
+//                         written only by the server (Admin SDK) after verified
+//                         payment.
+//   userQuotas/{uid}    – server only: the account's unpublished website and the
+//                         number of websites it started today.
 //   publicSites/{slug}  – the published copy of a site. World-readable, server
 //                         written. This is the only collection the public
 //                         renderer (/w/[slug]) reads.
@@ -41,18 +46,9 @@ service cloud.firestore {
     match /sites/{siteId} {
       allow read: if isOwner(resource);
 
-      // A client may only ever create an unpaid, unpublished draft it owns.
-      allow create: if signedIn()
-        && request.resource.data.ownerUid == request.auth.uid
-        && request.resource.data.status == 'draft'
-        && request.resource.data.paid == false
-        && request.resource.data.slug == null
-        && request.resource.data.published == null
-        && isString(request.resource.data.sourceDescription, 4000)
-        && request.resource.data.keys().hasOnly(
-             ['ownerUid', 'status', 'paid', 'paidAt', 'slug', 'published',
-              'publishedAt', 'draft', 'sourceDescription', 'generation',
-              'language', 'createdAt', 'updatedAt']);
+      // Starting and deleting a website go through the server, so the limit of
+      // one unpublished website per account can't be skipped from a browser.
+      allow create, delete: if false;
 
       // Editing is limited to the draft content and its bookkeeping fields.
       // ownerUid, status, paid, slug and published can never be changed here.
@@ -60,11 +56,10 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
              ['draft', 'sourceDescription', 'generation', 'language', 'updatedAt'])
         && isString(request.resource.data.sourceDescription, 4000);
+    }
 
-      // Only unpaid drafts can be deleted by their owner.
-      allow delete: if isOwner(resource)
-        && resource.data.status == 'draft'
-        && resource.data.paid == false;
+    match /userQuotas/{uid} {
+      allow read, write: if false;
     }
 
     match /publicSites/{slug} {

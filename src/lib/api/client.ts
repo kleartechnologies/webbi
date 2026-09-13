@@ -7,6 +7,8 @@ export class ApiError extends Error {
     public readonly code: string,
     message: string,
     public readonly status: number,
+    /** Anything else the route put on the error, e.g. existingSiteId on a 409 from /api/sites. */
+    public readonly details: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = "ApiError";
@@ -28,12 +30,16 @@ export async function callApi<T>(path: string, body: unknown): Promise<T> {
   } catch {
     throw new ApiError("network", "No connection. Check your internet and try again.", 0);
   }
-  const data = (await response.json().catch(() => ({}))) as { error?: { code?: string; message?: string } };
+  const data = (await response.json().catch(() => ({}))) as {
+    error?: { code?: string; message?: string } & Record<string, unknown>;
+  };
   if (!response.ok) {
+    const { code, message, ...details } = data.error ?? {};
     throw new ApiError(
-      data.error?.code ?? "unknown",
-      data.error?.message ?? "Something went wrong. Please try again.",
+      code ?? "unknown",
+      message ?? "Something went wrong. Please try again.",
       response.status,
+      details,
     );
   }
   return data as T;

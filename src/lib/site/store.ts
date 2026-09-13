@@ -1,11 +1,11 @@
 /**
- * Client-side Firestore access for sites. Everything here runs under
- * firestore.rules, so a user can only ever see and change their own sites.
+ * Client-side access for sites. Reads and draft edits run under firestore.rules,
+ * so a user can only ever see and change their own sites. Starting and deleting
+ * a website go through the server, which allows one unpublished website per
+ * account (src/lib/site/drafts.ts); the rules refuse both from the browser.
  */
 import {
-  addDoc,
   collection,
-  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
@@ -18,9 +18,10 @@ import {
   type QueryDocumentSnapshot,
   type Unsubscribe,
 } from "firebase/firestore";
+import { callApi } from "@/lib/api/client";
 import { getClientDb } from "@/lib/firebase/client";
-import type { Language, SiteContent } from "./schema";
-import type { GenerationState, Site, SiteDoc } from "./types";
+import type { Understanding } from "./schema";
+import type { Site, SiteDoc } from "./types";
 
 const SITES = "sites";
 
@@ -28,29 +29,14 @@ function toSite(snap: QueryDocumentSnapshot<DocumentData>): Site {
   return { id: snap.id, ...(snap.data() as SiteDoc) };
 }
 
-export async function createSite(input: {
-  ownerUid: string;
-  sourceDescription: string;
-  language: Language;
-  generation?: GenerationState;
-  draft?: SiteContent | null;
-}): Promise<string> {
-  const ref = await addDoc(collection(getClientDb(), SITES), {
-    ownerUid: input.ownerUid,
-    status: "draft",
-    paid: false,
-    paidAt: null,
-    slug: null,
-    published: null,
-    publishedAt: null,
-    draft: input.draft ?? null,
-    sourceDescription: input.sourceDescription,
-    generation: input.generation ?? { status: "understanding" },
-    language: input.language,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  return ref.id;
+/**
+ * Starts a website for the signed-in account. Throws an ApiError with status 409
+ * (and details.existingSiteId) when one is already in progress, or 429 past the
+ * day's limit.
+ */
+export async function createSite(input: { sourceDescription: string; understanding: Understanding }): Promise<string> {
+  const { siteId } = await callApi<{ siteId: string }>("/api/sites", input);
+  return siteId;
 }
 
 /** Fields an owner may change directly (mirrors firestore.rules). */
@@ -96,22 +82,7 @@ export function subscribeUserSites(
   return onSnapshot(q, (snap) => onChange(snap.docs.map(toSite)), onError);
 }
 
-/** Drafts only — rules refuse to delete a paid or published site. */
+/** Drafts only — the server refuses to delete a paid or published site. */
 export async function deleteDraftSite(siteId: string): Promise<void> {
-  await deleteDoc(doc(getClientDb(), SITES, siteId));
-}
-
-/**
- * Used when an anonymous visitor signs in to an account that already exists:
- * the draft they built is copied into the account (the anonymous original is
- * unreachable afterwards and is cleaned up by Firebase's anonymous-user TTL).
- */
-export async function copySiteToOwner(source: Site, ownerUid: string): Promise<string> {
-  return createSite({
-    ownerUid,
-    sourceDescription: source.sourceDescription,
-    language: source.language,
-    generation: source.generation,
-    draft: source.draft,
-  });
+  await callApi<{ deleted: true }>("/api/sites/delete", { siteId });
 }
