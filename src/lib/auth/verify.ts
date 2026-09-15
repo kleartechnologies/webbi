@@ -23,6 +23,12 @@ export interface VerifiedUser {
   emailVerified?: boolean;
   /** Sign-in providers linked to the account when the token was issued ("password", "google.com"). */
   providers?: string[];
+  /** The provider used for the sign-in this token descends from. */
+  signInProvider?: string;
+  /** When the user last actually signed in (seconds). Refreshing a token doesn't change it. */
+  authTime?: number;
+  /** The webbiRole custom claim, set only by scripts/ops/admin-role.mjs. See src/lib/admin/auth.ts. */
+  role?: string;
 }
 
 export class UnauthorizedError extends Error {
@@ -37,6 +43,8 @@ interface FirebaseClaims extends JWTPayload {
   email?: string;
   email_verified?: boolean;
   name?: string;
+  auth_time?: number;
+  webbiRole?: unknown;
 }
 
 /** Every provider on the account: the one used for this sign-in plus the linked identities. */
@@ -80,6 +88,9 @@ export async function verifyIdToken(token: string): Promise<VerifiedUser> {
     name: typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : undefined,
     emailVerified: payload.email_verified === true,
     providers: tokenProviders(payload),
+    signInProvider: typeof payload.firebase?.sign_in_provider === "string" ? payload.firebase.sign_in_provider : undefined,
+    authTime: typeof payload.auth_time === "number" ? payload.auth_time : undefined,
+    role: typeof payload.webbiRole === "string" ? payload.webbiRole : undefined,
   };
 }
 

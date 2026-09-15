@@ -18,6 +18,10 @@ export interface AuthAccount {
   /** Linked sign-in providers: "password", "google.com", … */
   providers: string[];
   disabled: boolean;
+  /** webbiRole from the account's custom claims, as Firebase Auth holds them now. */
+  role: string | null;
+  /** Tokens issued before this (seconds) are revoked. */
+  validSince: number | null;
 }
 
 export class AccountLookupError extends Error {
@@ -29,27 +33,50 @@ export class AccountLookupError extends Error {
 
 const LOOKUP_TIMEOUT_MS = 8_000;
 
+/**
+ * An account as the Identity Toolkit API returns it. The API also returns
+ * password hashes, salts and provider details: callers copy the fields they
+ * need and nothing else ever leaves the server.
+ */
+export interface RawAuthUser {
+  localId?: string;
+  email?: string;
+  displayName?: string;
+  emailVerified?: boolean;
+  disabled?: boolean;
+  providerUserInfo?: { providerId?: string }[];
+  /** JSON string of the custom claims. */
+  customAttributes?: string;
+  /** Seconds, as a string. */
+  validSince?: string;
+  /** Milliseconds, as strings. */
+  createdAt?: string;
+  lastLoginAt?: string;
+}
+
 interface LookupResponse {
-  users?: {
-    localId?: string;
-    emailVerified?: boolean;
-    disabled?: boolean;
-    providerUserInfo?: { providerId?: string }[];
-  }[];
+  users?: RawAuthUser[];
 }
 
 function authEmulatorHost(): string | undefined {
   return process.env.NODE_ENV !== "production" ? process.env.FIREBASE_AUTH_EMULATOR_HOST || undefined : undefined;
 }
 
-/** The account, or null when Firebase Auth has no such user. Throws AccountLookupError when Auth can't be asked. */
-export async function lookupAccount(uid: string): Promise<AuthAccount | null> {
+/**
+ * One Identity Toolkit call for this project with the Admin credential (or the
+ * emulator). `action` is the method after /accounts, e.g. ":lookup". Throws
+ * AccountLookupError when Auth can't be asked or refuses.
+ */
+export async function identityToolkit<T>(
+  action: string,
+  init: { method?: "GET" | "POST"; body?: unknown; query?: Record<string, string> } = {},
+): Promise<T> {
   const projectId = publicEnv.firebase.projectId;
   const emulator = authEmulatorHost();
-  let url: string;
+  let origin: string;
   let authorization: string;
   if (emulator) {
-    url = `http://${emulator}/identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:lookup`;
+    origin = `http://${emulator}/identitytoolkit.googleapis.com`;
     authorization = "Bearer owner";
   } else {
     const credential = getAdminApp().options.credential;
@@ -60,16 +87,18 @@ export async function lookupAccount(uid: string): Promise<AuthAccount | null> {
     } catch (error) {
       throw new AccountLookupError(`no access token (${error instanceof Error ? error.name : typeof error})`);
     }
-    url = `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:lookup`;
+    origin = "https://identitytoolkit.googleapis.com";
     authorization = `Bearer ${token}`;
   }
+  const url = new URL(`${origin}/v1/projects/${projectId}/accounts${action}`);
+  for (const [key, value] of Object.entries(init.query ?? {})) url.searchParams.set(key, value);
 
   let response: Response;
   try {
     response = await fetch(url, {
-      method: "POST",
+      method: init.method ?? "POST",
       headers: { "content-type": "application/json", authorization },
-      body: JSON.stringify({ localId: [uid] }),
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
       signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
       cache: "no-store",
     });
@@ -77,15 +106,46 @@ export async function lookupAccount(uid: string): Promise<AuthAccount | null> {
     throw new AccountLookupError(`request failed (${error instanceof Error ? error.name : typeof error})`);
   }
   if (!response.ok) throw new AccountLookupError(`status ${response.status}`);
-  const data = (await response.json().catch(() => null)) as LookupResponse | null;
+  const data = (await response.json().catch(() => null)) as T | null;
   if (!data) throw new AccountLookupError("unreadable response");
-  const user = data.users?.find((candidate) => candidate.localId === uid);
+  return data;
+}
+
+/** The webbiRole claim inside an account's customAttributes JSON, or null. */
+export function roleFromCustomAttributes(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    const claims = JSON.parse(value) as unknown;
+    const role = claims && typeof claims === "object" ? (claims as { webbiRole?: unknown }).webbiRole : undefined;
+    return typeof role === "string" ? role : null;
+  } catch {
+    return null;
+  }
+}
+
+export function providerIds(user: RawAuthUser): string[] {
+  return (user.providerUserInfo ?? []).map((info) => info.providerId).filter((id): id is string => Boolean(id));
+}
+
+/** Several accounts by uid (at most 100), with passwords and claims left behind. Missing uids are simply absent. */
+export async function lookupRawAccounts(query: { localId?: string[]; email?: string[] }): Promise<RawAuthUser[]> {
+  const data = await identityToolkit<LookupResponse>(":lookup", { body: query });
+  return data.users ?? [];
+}
+
+/** The account, or null when Firebase Auth has no such user. Throws AccountLookupError when Auth can't be asked. */
+export async function lookupAccount(uid: string): Promise<AuthAccount | null> {
+  const users = await lookupRawAccounts({ localId: [uid] });
+  const user = users.find((candidate) => candidate.localId === uid);
   if (!user) return null;
+  const validSince = Number(user.validSince);
   return {
     uid,
     emailVerified: user.emailVerified === true,
-    providers: (user.providerUserInfo ?? []).map((info) => info.providerId).filter((id): id is string => Boolean(id)),
+    providers: providerIds(user),
     disabled: user.disabled === true,
+    role: roleFromCustomAttributes(user.customAttributes),
+    validSince: Number.isFinite(validSince) && validSince > 0 ? validSince : null,
   };
 }
 

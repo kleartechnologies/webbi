@@ -546,8 +546,14 @@ describe("no way around the upload route", () => {
   });
 
   it("has exactly one server module that writes objects: the checked upload path", () => {
+    // The owner admin panel only lists objects (image counts, the storage health check).
+    const READ_ONLY = ["src/lib/admin/health.ts", "src/lib/admin/sites.ts"];
     const savers = app.filter((file) => /\.file\([^)]*\)\s*\.save\(|adminStorage\(\)/.test(readFileSync(file, "utf8")));
-    expect(savers.map((file) => relative(ROOT, file)).sort()).toEqual(["src/lib/firebase/admin.ts", "src/lib/images/storage.ts"]);
+    expect(savers.map((file) => relative(ROOT, file)).filter((file) => !READ_ONLY.includes(file)).sort()).toEqual(["src/lib/firebase/admin.ts", "src/lib/images/storage.ts"]);
+    for (const file of READ_ONLY) {
+      const source = readFileSync(join(ROOT, file), "utf8");
+      expect(source, file).not.toMatch(/\.(save|delete|deleteFiles|upload|createWriteStream|copy|move|rename|makePublic|setMetadata)\(/);
+    }
   });
 
   it("ships storage rules that refuse every browser write and only let an owner read", () => {

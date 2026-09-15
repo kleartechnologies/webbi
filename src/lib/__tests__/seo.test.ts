@@ -38,6 +38,8 @@ describe("official site SEO", () => {
     expect(rule.userAgent).toBe("*");
     expect(rule.allow).toBe("/");
     expect(rule.disallow).not.toContain("/");
+    expect(rule.disallow).toContain("/admin");
+    expect(JSON.stringify(sitemap())).not.toContain("admin");
     expect(JSON.stringify(rule.disallow)).not.toContain("/w/");
     expect(map).toBe(`${ORIGIN}/sitemap.xml`);
   });

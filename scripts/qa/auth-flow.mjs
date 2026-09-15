@@ -242,8 +242,15 @@ await step("B  Continue with Google signs a new visitor up and drops them in cre
   await click(google, "button", "Continue with Google");
   const popup = await opened;
   await popup.waitForSelector("#add-account-button, #email-input", { timeout: 20000 });
-  const addAccount = await popup.$("#add-account-button");
-  if (addAccount && (await addAccount.evaluate((e) => e.getClientRects().length > 0))) await addAccount.click();
+  // With accounts already in the emulator the widget lists them first, and a click on
+  // "Add new account" can land before its handler is attached: click until the form shows.
+  for (let i = 0; i < 30; i++) {
+    const form = await popup.$eval("#email-input", (e) => e.getClientRects().length > 0).catch(() => false);
+    if (form) break;
+    const addAccount = await popup.$("#add-account-button");
+    if (addAccount && (await addAccount.evaluate((e) => e.getClientRects().length > 0))) await addAccount.click().catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
   await popup.waitForSelector("#email-input", { visible: true, timeout: 20000 });
   await popup.type("#email-input", `qa-google-${tag}@example.com`);
   await popup.type("#display-name-input", "Ros Google");

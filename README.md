@@ -126,6 +126,7 @@ Public Firebase values (`NEXT_PUBLIC_FIREBASE_*`) are safe to expose and are gov
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | alternative provider | optional; only used when `AI_PROVIDER=anthropic` or no OpenAI key is set |
 | `AI_GLOBAL_DAILY_LIMIT`, `AI_GLOBAL_MONTHLY_LIMIT` | Webbi-wide AI budget | optional; defaults 500 / 6000, `0` turns the AI off (see "AI cost protection") |
 | `APP_CHECK_MODE` | App Check on the server: `off` \| `monitor` \| `enforce` | optional, default `off` (see "App Check") |
+| `ADMIN_HOSTS`, `ADMIN_PANEL_ENABLED` | the owner admin panel: which hosts serve `/admin`, and its kill switch | optional; defaults `webbi.online` and on (see "Admin panel") |
 | `NEXT_PUBLIC_FIREBASE_APPCHECK_SITE_KEY` | App Check in the browser (reCAPTCHA Enterprise site key; public) | Firebase Console → App Check. `NEXT_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN` is for local development only |
 | `PAYMENT_PROVIDER`, `BILLPLZ_SECRET_KEY`, `BILLPLZ_COLLECTION_ID`, `BILLPLZ_X_SIGNATURE_KEY`, `BILLPLZ_BASE_URL` | Publish → payment | See "Payments" below. With the three Billplz keys set and `PAYMENT_PROVIDER` unset, Billplz takes payments; with `PAYMENT_PROVIDER=none` (or no keys) the Publish screen explains that payments are not switched on yet. Nothing is ever marked paid or published without a verified payment. `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` are only for the Stripe reference adapter. |
 
@@ -218,6 +219,12 @@ QA_BASE_URL=http://localhost:3108 npm run qa:industries
 
 That exercises the real model through the real adapter, but not your own key. To test your key itself, put it in `.env.local` (git-ignored) and use the plain dev server with `AI_PROVIDER=openai`, or test the production deploy — Netlify never overrides a key you set yourself.
 
+The owner admin panel against the same emulator dev server (the Auth emulator's Google widget signs the owner in; the script grants and revokes the role with `ops:admin-role` itself):
+
+```bash
+QA_BASE_URL=http://localhost:3000 npm run qa:admin   # owner sees every section, normal user and other hosts get not-found, signed-out redirect, no leaks, headers, 400px
+```
+
 Security headers against a production server (`next dev` adds dev-only allowances, so check with `next start`):
 
 ```bash
@@ -282,9 +289,53 @@ Environment variables to set under Site configuration → Environment variables 
 7. `NEXT_PUBLIC_SITE_URL=https://webbi.online` in the production context: it is the domain in share links and in each new bill's callback and return URLs. It is inlined at build time, so redeploy after changing it.
 8. Optional: `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=webbi.online` so Google sign-in names Webbi, only after the OAuth redirect URI is added (see "Google sign-in domain").
 
+## Admin panel
+
+`https://webbi.online/admin` is a **read-only** view of Webbi for its owner: overview, users, websites, payments, AI usage, moderation and system status. It can't change anything: no suspending, refunds, payment edits, site edits or account changes (suspensions stay with `ops:moderate`, refunds in Billplz).
+
+**Who gets in.** Only an account with the Firebase Auth custom claim `webbiRole: "owner"`. Nothing else grants it: no email list, cookie, local storage or Firestore document. Every admin API route calls `requireAdmin()` (`src/lib/admin/auth.ts`) itself, which requires, on every request:
+
+1. `ADMIN_PANEL_ENABLED` isn't `false`, and the request's `Host` is an admin host (`src/lib/admin/hosts.ts`)
+2. a Firebase ID token verified by signature, issuer, audience and expiry (the emulator's unsigned tokens are refused in production)
+3. in the token: `webbiRole: "owner"`, `email_verified`, a `google.com` sign-in, and `auth_time` within the last 12 hours (older → "Sign in again")
+4. App Check, per `APP_CHECK_MODE`
+5. Firebase Auth right now (Identity Toolkit `accounts:lookup`): the account exists, isn't disabled, still has the role, a verified email and Google linked, and its sessions weren't revoked after this sign-in
+
+Every refusal is the same `404 not_found` as a missing page; anyone who isn't the owner sees "Page not found", so the panel's existence isn't revealed. If Firebase Auth can't be reached the owner gets a 503, never a pass. The page HTML is an empty shell: data only comes from `/api/admin/*` after the session check, and the browser never reads Firestore for it (the rules deny `adminMetrics` and `adminAuditLogs` to every browser, the owner included).
+
+**Hosts.** `src/proxy.ts` runs only on `/admin` and `/api/admin` and answers 404 unless the host is in `ADMIN_HOSTS` (default `webbi.online`; `localhost` is added outside production). `*.netlify.app` and local hosts are refused in production even if listed, and customer domains are never admin hosts. The proxy is only a fence; `requireAdmin()` checks the host again. A future custom-domain proxy must use `isAdminHost()` so `customer.com/admin` stays not-found.
+
+**Data.** Accounts come from Firebase Auth (not `users/{uid}`); `sites`, `payments`, `userQuotas`, `siteAi`, `aiBudget` and `siteModeration` are read with the Admin SDK, a page at a time (25 by default, at most 50), selecting only the fields shown. Responses are built from whitelists (`src/lib/admin/dto.ts`) and refused if they contain a password hash, salt, token, credential, `checkoutUrl`, raw claims, or site content. Revenue is "collected per Webbi's records" (refunds are made in Billplz and not deducted); AI usage is a request count with no provider cost. The overview is cached in `adminMetrics/overview` for 5 minutes (manual refresh at most once a minute). OpenAI and Billplz are only checked when the owner presses "Run check".
+
+**Audit.** `adminAuditLogs`: `ADMIN_SESSION_START` once per sign-in, and `ADMIN_ACCESS_DENIED` counted per account per hour for refusals after a valid token. Only uid, reason, route name and server timestamps; never tokens, IPs, bodies or customer content.
+
+**Headers.** `/admin` and `/api/admin` send `X-Robots-Tag: noindex, nofollow, noarchive` and `Cache-Control: private, no-store`; robots.txt disallows `/admin`; it isn't in the sitemap or any public navigation.
+
+**Granting the role** (CLI only; dry run without `--apply`; credentials as for `ops:moderate`; prints the project first):
+
+```bash
+npm run ops:admin-role -- status <uid>
+npm run ops:admin-role -- grant <uid> --apply    # refuses a disabled, unverified or non-Google account
+npm run ops:admin-role -- revoke <uid> --apply   # removes the claim and revokes the account's sessions
+```
+
+Find the uid in Firebase Console → Authentication. After granting, sign out and sign in to `https://webbi.online/admin` with Google.
+
+**Deploying** (in this order):
+
+1. `firebase deploy --only firestore:indexes --project webbi-85f26`, then wait until every index shows Enabled in the Console
+2. `firebase deploy --only firestore:rules --project webbi-85f26` (adds the explicit `adminMetrics` / `adminAuditLogs` denies)
+3. deploy the code
+4. Netlify production: `ADMIN_HOSTS=webbi.online`
+5. Netlify production: `ADMIN_PANEL_ENABLED=true`, redeploy
+6. `npm run ops:admin-role -- grant <uid> --apply`
+7. smoke test: owner sees every section on `https://webbi.online/admin`; another account sees "Page not found"; `https://webbi-my.netlify.app/admin` and `/api/admin/session` are 404
+
+Rollback: `ADMIN_PANEL_ENABLED=false` and redeploy (every admin page and API becomes 404), and/or revoke the role.
+
 ## Moderation and takedown
 
-A website that breaks the rules can be taken down in seconds and can't be brought back by its owner. Webbi does this by hand; there is no admin page and no public endpoint.
+A website that breaks the rules can be taken down in seconds and can't be brought back by its owner. Webbi does this by hand with the script below; there is no public endpoint, and the owner admin panel (see "Admin panel") only shows suspensions, it can't make them.
 
 State (`src/lib/site/moderationCore.ts`):
 

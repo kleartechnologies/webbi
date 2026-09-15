@@ -218,5 +218,19 @@ export function securityHeaderRules(options: SecurityHeaderOptions = {}): Header
         { key: "Cache-Control", value: "private, no-store" },
       ],
     },
+    {
+      // The owner's admin panel (pages and API): never indexed, never stored.
+      // Pages are also force-dynamic, so Next's own Cache-Control is no-store.
+      source: "/admin",
+      headers: ADMIN_HEADERS,
+    },
+    { source: "/admin/:path*", headers: ADMIN_HEADERS },
+    { source: "/api/admin/:path*", headers: ADMIN_HEADERS },
   ];
 }
+
+/** Added to every admin page and API response, including the proxy's not-found (src/proxy.ts). */
+export const ADMIN_HEADERS = [
+  { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+  { key: "Cache-Control", value: "private, no-store" },
+];

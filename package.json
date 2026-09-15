@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:rules": "firebase emulators:exec --only firestore,storage --project demo-webbi \"vitest run --fileParallelism=false src/lib/site/__tests__/drafts.emulator.test.ts src/lib/ai/__tests__/guard.emulator.test.ts src/lib/images/__tests__/storage.emulator.test.ts src/lib/site/__tests__/publish.emulator.test.ts\"",
+    "test:rules": "firebase emulators:exec --only firestore,storage --project demo-webbi \"vitest run --fileParallelism=false src/lib/site/__tests__/drafts.emulator.test.ts src/lib/ai/__tests__/guard.emulator.test.ts src/lib/images/__tests__/storage.emulator.test.ts src/lib/site/__tests__/publish.emulator.test.ts src/lib/admin/__tests__/admin.emulator.test.ts\"",
     "qa:auth": "node scripts/qa/auth-flow.mjs",
     "qa:landing": "node scripts/qa/landing.mjs",
     "qa:publish": "node scripts/qa/publish-flow.mjs",
@@ -19,7 +19,9 @@
     "qa:share": "node scripts/qa/share.mjs",
     "qa:headers": "node scripts/qa/security-headers.mjs",
     "qa:cleanup": "node scripts/qa/cleanup-anonymous.mjs",
-    "ops:moderate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops/moderate.mjs"
+    "qa:admin": "node scripts/qa/admin.mjs",
+    "ops:moderate": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops/moderate.mjs",
+    "ops:admin-role": "node scripts/ops/admin-role.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",

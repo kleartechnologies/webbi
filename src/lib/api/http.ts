@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import { EmailUnverifiedError } from "@/lib/auth/publishing";
 import { UnauthorizedError } from "@/lib/auth/verify";
 import { AppCheckError } from "@/lib/security/appCheck";
+import { AdminBadRequestError, AdminNotFoundError, AdminUnavailableError } from "@/lib/admin/errors";
 import { AiError, AiQuotaError } from "@/lib/ai/errors";
 import { AdminNotConfiguredError } from "@/lib/firebase/admin";
 import { UploadError } from "@/lib/images/storage";
@@ -35,6 +36,10 @@ export function apiError(status: number, code: ApiErrorCode, message: string, ex
 
 /** Maps thrown errors to a consistent JSON error body. */
 export function handleApiError(error: unknown) {
+  // The admin guard's refusals: one generic answer, whatever the reason was.
+  if (error instanceof AdminNotFoundError) return apiError(404, "not_found", "Not found.");
+  if (error instanceof AdminUnavailableError) return apiError(503, "internal", error.message);
+  if (error instanceof AdminBadRequestError) return apiError(400, "bad_request", error.message);
   if (error instanceof UnauthorizedError) return apiError(401, "unauthenticated", error.message);
   if (error instanceof AppCheckError) return apiError(401, "app_check_failed", error.message);
   if (error instanceof EmailUnverifiedError) return apiError(403, "email_unverified", error.message);

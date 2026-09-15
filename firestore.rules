@@ -28,6 +28,12 @@ rules_version = '2';
 //                         (/w/[slug]) reads.
 //   slugs/{slug}        – slug registry, server only.
 //   payments/{id}       – payment records, server written, owner readable.
+//   adminMetrics/{id}   – server only: the owner admin panel's cached overview.
+//   adminAuditLogs/{id} – server only: admin sessions and refused admin access.
+//
+// The admin panel (/admin, owner only) never reads Firestore from a browser:
+// its API routes use the Admin SDK. No custom claim (webbiRole included)
+// widens any rule here.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -104,6 +110,15 @@ service cloud.firestore {
     match /payments/{paymentId} {
       allow read: if isOwner(resource);
       allow write: if false;
+    }
+
+    // Admin panel data: only its API routes (Admin SDK) touch these.
+    match /adminMetrics/{id} {
+      allow read, write: if false;
+    }
+
+    match /adminAuditLogs/{id} {
+      allow read, write: if false;
     }
 
     match /{document=**} {

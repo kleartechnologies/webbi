@@ -208,7 +208,28 @@ describe("content security policy", () => {
     expect(config).toMatch(/async headers\(\)[\s\S]*securityHeaderRules\(/);
     expect(config).toMatch(/poweredByHeader:\s*false/);
     expect(readFileSync(path.join(root, "netlify.toml"), "utf8")).not.toMatch(/\[\[headers\]\]/);
-    expect(existsAny(["src/middleware.ts", "src/proxy.ts", "middleware.ts", "proxy.ts", "public/_headers"])).toBe(false);
+    expect(existsAny(["src/middleware.ts", "middleware.ts", "proxy.ts", "public/_headers"])).toBe(false);
+    // The one proxy only fences off the admin panel; it sets no security headers for the rest of the app.
+    const proxy = readFileSync(path.join(root, "src/proxy.ts"), "utf8");
+    expect(proxy).toMatch(/matcher:\s*\["\/admin", "\/admin\/:path\*", "\/api\/admin", "\/api\/admin\/:path\*"\]/);
+  });
+});
+
+describe("owner admin panel", () => {
+  it.each(["/admin", "/admin/users", "/admin/sites/abc123", "/api/admin/overview", "/api/admin/system/check"])(
+    "%s is never indexed or stored",
+    (p) => {
+      const h = headersFor(p);
+      expect(h["x-robots-tag"]).toBe("noindex, nofollow, noarchive");
+      expect(h["cache-control"]).toBe("private, no-store");
+      expect(h["x-frame-options"]).toBe("DENY");
+      expect(h["content-security-policy"]).toBeDefined();
+    },
+  );
+
+  it("doesn't touch other paths", () => {
+    expect(headersFor("/administrator")["x-robots-tag"]).toBeUndefined();
+    expect(headersFor("/w/admin")["x-robots-tag"]).toBeUndefined();
   });
 });
 
