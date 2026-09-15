@@ -72,6 +72,8 @@ const GOOGLE_MAPS_EMBED = "https://www.google.com";
 const RECAPTCHA_SCRIPTS = ["https://www.google.com/recaptcha/", "https://www.gstatic.com/recaptcha/"];
 /** reCAPTCHA's fallback frame host; its main frame is on www.google.com, already allowed for Maps. */
 const RECAPTCHA_FRAME_FALLBACK = "https://recaptcha.google.com/recaptcha/";
+/** reCAPTCHA Enterprise's own fetch calls (…/recaptcha/enterprise/clr) before it hands App Check a token. */
+const RECAPTCHA_CONNECT = "https://www.google.com/recaptcha/";
 const APP_CHECK_API = "https://content-firebaseappcheck.googleapis.com";
 
 const DEV_ORIGINS = ["http://127.0.0.1:*", "http://localhost:*"];
@@ -139,7 +141,7 @@ export function appCspDirectives(options: SecurityHeaderOptions = {}): Directive
       "style-src": [SELF, UNSAFE_INLINE],
       "img-src": [SELF, "data:", "blob:", FIREBASE_STORAGE],
       "font-src": [SELF],
-      "connect-src": [SELF, IDENTITY_TOOLKIT, SECURE_TOKEN, FIRESTORE, ...(appCheck ? [APP_CHECK_API] : [])],
+      "connect-src": [SELF, IDENTITY_TOOLKIT, SECURE_TOKEN, FIRESTORE, ...(appCheck ? [RECAPTCHA_CONNECT, APP_CHECK_API] : [])],
       // Google Maps too: the landing opens example sites, and a client-side
       // navigation into /w/… keeps this page's policy.
       "frame-src": [...authOrigin(options.authDomain), GOOGLE_MAPS_EMBED, ...(appCheck ? [RECAPTCHA_FRAME_FALLBACK] : [])],

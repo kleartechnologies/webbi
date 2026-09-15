@@ -177,7 +177,14 @@ describe("content security policy", () => {
       "https://www.google.com/recaptcha/",
       "https://www.gstatic.com/recaptcha/",
     ]);
-    expect(on["connect-src"]).toContain("https://content-firebaseappcheck.googleapis.com");
+    expect(on["connect-src"]).toEqual([
+      "'self'",
+      "https://identitytoolkit.googleapis.com",
+      "https://securetoken.googleapis.com",
+      "https://firestore.googleapis.com",
+      "https://www.google.com/recaptcha/",
+      "https://content-firebaseappcheck.googleapis.com",
+    ]);
     expect(on["frame-src"]).toEqual([
       "https://webbi-85f26.firebaseapp.com",
       "https://www.google.com",
