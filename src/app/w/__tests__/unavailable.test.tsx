@@ -66,6 +66,8 @@ describe("/w/[slug] and moderation", () => {
     const markup = await render("kedai-aisyah");
     expect(markup).toContain("Kedai Aisyah Test");
     expect(markup).not.toContain("currently unavailable");
+    // Stored data as it is (an area, no re-generation): the location section renders its Google Maps embed.
+    expect(markup).toMatch(/<iframe src="https:\/\/www\.google\.com\/maps\?q=Proton%20Shah%20Alam&amp;output=embed"/);
     expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/documents\/publicSites\/kedai-aisyah\?key=/);
     expect((await generateMetadata(params("kedai-aisyah"))).title).toEqual({ absolute: expect.stringContaining("Kedai Aisyah Test") });
 

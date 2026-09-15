@@ -307,7 +307,8 @@ const profileFacts = (page) =>
     await wait(300);
     const loc = await locationFacts(page);
     expect(!loc.placeholder, "preview still shows the 'Google Maps' placeholder box");
-    expect(!loc.iframeSrc, "preview should not embed the map");
+    // The owner's preview shows the same map the live site will.
+    expect(loc.iframeSrc === `https://www.google.com/maps?q=${MAPS_QUERY}&output=embed`, `preview embed src ${loc.iframeSrc}`);
     expect(loc.href === MAPS_HREF, `maps link ${loc.href}`);
     expect(loc.addressShown, "address not shown in preview");
     const prof = await profileFacts(page);
@@ -494,6 +495,49 @@ const profileFacts = (page) =>
     await page.screenshot({ path: path.join(shots, "p12-editor-socials.png") });
   });
 
+  await step(page, "A12 editor full Preview (phone): the address, a sized Google Maps embed that loads, and the Maps button", async () => {
+    await page.setViewport(mobile);
+    await page.goto(`${base}/s/${siteId}/edit`, { waitUntil: "load" });
+    await page.waitForSelector("[aria-label='Open full preview']", { timeout: 30000 });
+    await page.click("[aria-label='Open full preview']");
+    await page.waitForSelector("[role=dialog][aria-label=Preview] iframe", { timeout: 15000 });
+    const m = await page.$eval("[role=dialog][aria-label=Preview]", async (dialog) => {
+      const frame = dialog.querySelector("iframe");
+      frame.scrollIntoView({ block: "center" });
+      await new Promise((r) => setTimeout(r, 300));
+      const r = frame.getBoundingClientRect();
+      const link = [...dialog.querySelectorAll("a")].find((a) => /Open in Google Maps|Buka di Google Maps/.test(a.textContent));
+      const l = link?.getBoundingClientRect();
+      return {
+        src: frame.getAttribute("src"),
+        href: link?.getAttribute("href") ?? null,
+        w: Math.round(r.width),
+        h: Math.round(r.height),
+        onTop: document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === frame,
+        overlapsLink: Boolean(l && r.bottom > l.top && l.bottom > r.top),
+        address: dialog.innerText.includes("9257C"),
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+      };
+    });
+    expect(m.src === `https://www.google.com/maps?q=${MAPS_QUERY}&output=embed`, `editor preview embed src ${m.src}`);
+    expect(m.href === MAPS_HREF, `editor preview maps link ${m.href}`);
+    expect(m.address, "address missing in the editor preview");
+    expect(m.w >= 300 && m.h >= 200 && m.onTop && !m.overlapsLink, `editor preview map ${JSON.stringify(m)}`);
+    expect(m.scrollWidth <= m.innerWidth, `horizontal overflow ${m.scrollWidth} > ${m.innerWidth}`);
+    const deadline = Date.now() + 30000;
+    let frame;
+    while (Date.now() < deadline) {
+      frame = page.frames().find((f) => f.url().includes("google.com/maps/embed"));
+      if (frame) break;
+      await wait(500);
+    }
+    expect(frame, "editor preview map never loaded Google's embed page (blocked by CSP?)");
+    await wait(3000);
+    await page.screenshot({ path: path.join(shots, "p12-editor-preview-map.png") });
+    await page.keyboard.press("Escape");
+  });
+
   await visitorCtx.close();
   await ctx.close();
 }
@@ -539,7 +583,8 @@ const profileFacts = (page) =>
     await waitHeroLoaded(page);
     await wait(300);
     const loc = await locationFacts(page);
-    expect(!loc.placeholder && !loc.iframeSrc, "restaurant preview shows a map box");
+    expect(!loc.placeholder, "restaurant preview shows the placeholder box");
+    expect(loc.iframeSrc === "https://www.google.com/maps?q=12%2C%20Jalan%20Reko%2C%2043000%20Kajang%2C%20Selangor&output=embed", `restaurant preview embed src ${loc.iframeSrc}`);
     expect(loc.href === "https://www.google.com/maps/search/?api=1&query=12%2C%20Jalan%20Reko%2C%2043000%20Kajang%2C%20Selangor", `maps link ${loc.href}`);
     const h = await heroFacts(page);
     expect(h.mode === "visual" && h.img?.loaded && h.img.fit === "cover", `hero ${JSON.stringify({ mode: h.mode, img: h.img })}`);

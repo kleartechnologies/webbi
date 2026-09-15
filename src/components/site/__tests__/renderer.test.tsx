@@ -130,14 +130,54 @@ describe("location", () => {
     expect(out).not.toContain(">Google Maps</span>");
   });
 
-  it("preview never shows a fake map box, only the address card with the same Maps link", () => {
+  it("the owner's preview (ready screen, editor) shows the same map and Maps link the live site will", () => {
+    const site = car();
+    site.business.address = AMIR;
+    const out = renderToStaticMarkup(<SiteRenderer site={site} mode="preview" maps />);
+    const query = "No.%209257C%2C%20Jalan%20Balakong%2C%2043300%20Balakong%2C%20Selangor";
+    expect(out).toContain(`<iframe src="${EMBED}${query}&amp;output=embed"`);
+    expect(out).toContain(`href="${SEARCH}${query}"`);
+    expect(out).toContain("data-site-map-frame");
+    expect(out).not.toContain(">Google Maps</span>");
+    expect(out).toContain("Open in Google Maps");
+  });
+
+  it("a preview that doesn't ask for maps (landing mockups) shows no map box, only the address card", () => {
     const site = car();
     site.business.address = AMIR;
     const out = html(site, "preview");
     expect(out).not.toContain("<iframe");
-    expect(out).not.toContain(">Google Maps</span>");
+    expect(out).not.toContain("data-site-map-frame");
     expect(out).toContain(`href="${SEARCH}No.%209257C`);
     expect(out).toContain("Open in Google Maps");
+  });
+
+  it("the map and the Maps button point at the same place", () => {
+    const site = car();
+    site.business.address = AMIR;
+    const out = html(site);
+    const embedQ = out.match(/<iframe src="https:\/\/www\.google\.com\/maps\?q=([^&"]+)&amp;output=embed"/)?.[1];
+    const linkQ = out.match(/href="https:\/\/www\.google\.com\/maps\/search\/\?api=1&amp;query=([^"]+)"/)?.[1];
+    expect(embedQ).toBeTruthy();
+    expect(embedQ).toBe(linkQ);
+  });
+
+  it("an address can't bring its own frame: the only iframe is the Google Maps embed, with the address encoded in its query", () => {
+    for (const address of [
+      `"><iframe src="https://evil.example/"></iframe>`,
+      `https://evil.example/embed`,
+      `Jalan 1&output=embed&q=x" onload="alert(1)`,
+    ]) {
+      const site = car();
+      site.business.address = address;
+      for (const out of [html(site), renderToStaticMarkup(<SiteRenderer site={site} mode="preview" maps />)]) {
+        const frames = [...out.matchAll(/<iframe\b[^>]*>/gi)].map((m) => m[0]);
+        expect(frames, address).toHaveLength(1);
+        expect(frames[0]).toMatch(/^<iframe src="https:\/\/www\.google\.com\/maps\?q=[^"&]*&amp;output=embed" title="/);
+        // Attribute values blanked: a handler name may survive inside the escaped title text, never as an attribute.
+        expect(frames[0].replace(/="[^"]*"/g, '=""')).not.toMatch(/\son[a-z]+=/i);
+      }
+    }
   });
 
   it("area only (no street address) links a Maps search for the area and says it is an area", () => {

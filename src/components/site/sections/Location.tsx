@@ -3,6 +3,7 @@ import { cn } from "@/lib/cn";
 import { resolveLocation } from "@/lib/site/location";
 import type { SectionOf } from "@/lib/site/schema";
 import type { TemplateId } from "@/lib/site/templates";
+import { MapFrame } from "../MapFrame";
 import { Section, SectionHead } from "../Section";
 import type { RenderCtx } from "../context";
 
@@ -23,7 +24,8 @@ const LOOK: Record<
     row: "border-t border-site-line py-3 text-[14px]",
   },
   elegant: {
-    grid: "@3xl:grid-cols-[minmax(0,1fr)_404px] @3xl:gap-16",
+    // Side by side from @4xl: at a 768px container the fixed 404px column left the map ~220px wide.
+    grid: "@4xl:grid-cols-[minmax(0,1fr)_404px] @4xl:gap-16",
     map: "aspect-[4/3] @3xl:aspect-[16/10]",
     card: "flex flex-col gap-4",
     label: "text-[10px] font-semibold uppercase tracking-[0.24em] text-site-accent",
@@ -45,8 +47,9 @@ const LOOK: Record<
     row: "border-b border-site-line py-3 text-[15px] font-semibold",
   },
   trust: {
-    grid: "@3xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] @3xl:gap-6",
-    map: "rounded-[12px] border border-site-line aspect-[4/3] @3xl:order-2 @3xl:aspect-auto @3xl:min-h-[320px]",
+    // Side by side from @4xl: at a 768px container the card's column left the map ~217px wide.
+    grid: "@4xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] @4xl:gap-6",
+    map: "rounded-[12px] border border-site-line aspect-[4/3] @4xl:order-2 @4xl:aspect-auto @4xl:min-h-[320px]",
     card: "flex flex-col gap-4 rounded-[12px] border border-site-line bg-white p-5 @3xl:p-6",
     label: "font-site-mono text-[10px] font-medium uppercase tracking-[0.12em] text-site-muted",
     address: "text-[17px] leading-[1.5] font-semibold",
@@ -70,27 +73,21 @@ const LOOK: Record<
 
 /**
  * Location: address card with a real "Open in Google Maps" destination, plus a
- * keyless Google Maps embed on the published site. Previews (ready screen,
- * editor, landing mockup) show the card only — never an empty map box.
+ * keyless Google Maps embed for the same place wherever the renderer allows
+ * maps (the published site and the owner's ready/editor previews; not the
+ * landing mockups). Without a location there is no map box at all.
  */
 export function Location({ ctx, section }: { ctx: RenderCtx; section: SectionOf<"location"> }) {
-  const { site, strings, mode, target, rel, template } = ctx;
+  const { site, strings, maps, target, rel, template } = ctx;
   const look = LOOK[template];
   const place = resolveLocation(section, site.business);
   const hours = section.hours ?? [];
   if (!place && !hours.length && !section.note) return null;
-  const embed = mode === "public" && place ? place : null;
+  const embed = maps && place ? place : null;
 
   const map = embed ? (
-    <div className={cn("relative min-w-0 overflow-hidden bg-site-line", look.map)}>
-      <iframe
-        src={embed.embedSrc}
-        title={`${strings.location}: ${embed.query}`}
-        className="absolute inset-0 h-full w-full border-0"
-        loading="lazy"
-        referrerPolicy="no-referrer-when-downgrade"
-        allowFullScreen
-      />
+    <div data-site-map-frame className={cn("relative min-w-0 overflow-hidden bg-site-line", look.map)}>
+      <MapFrame src={embed.embedSrc} title={`${strings.location}: ${embed.query}`} />
     </div>
   ) : null;
 

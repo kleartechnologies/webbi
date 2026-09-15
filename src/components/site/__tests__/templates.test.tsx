@@ -191,6 +191,45 @@ describe("links and text are safe in every template", () => {
   });
 });
 
+describe("location map across templates", () => {
+  const ADDRESS = "No. 9257C, Jalan Balakong, 43300 Balakong, Selangor (berdekatan kawasan Amerin Mall)";
+  const QUERY = "No.%209257C%2C%20Jalan%20Balakong%2C%2043300%20Balakong%2C%20Selangor";
+  const frames = (out: string) => [...out.matchAll(/<iframe\b[^>]*>/gi)].map((m) => m[0]);
+
+  it.each(TEMPLATE_IDS)("%s: an address renders the address, one sized Google Maps frame and the Maps button, for the same place", (template) => {
+    const site = as(demo("hafiz-rahman"), template);
+    site.business.address = ADDRESS;
+    const live = html(site);
+    const owner = renderToStaticMarkup(<SiteRenderer site={site} mode="preview" maps />);
+    for (const out of [live, owner]) {
+      expect(out).toContain("Jalan Balakong, 43300 Balakong, Selangor (berdekatan kawasan Amerin Mall)");
+      expect(frames(out)).toEqual([expect.stringContaining(`src="https://www.google.com/maps?q=${QUERY}&amp;output=embed"`)]);
+      expect(out).toContain(`href="https://www.google.com/maps/search/?api=1&amp;query=${QUERY}"`);
+      // The frame box always has a height of its own (an aspect ratio or a min height), so the map can't collapse to 0.
+      const box = out.match(/<div data-site-map-frame="[^"]*" class="([^"]*)"/)?.[1] ?? "";
+      expect(box).toMatch(/aspect-\[4\/3\]/);
+      expect(box).toContain("overflow-hidden");
+      expect(frames(out)[0]).toContain("absolute inset-0 h-full w-full");
+    }
+    // Landing mockups keep the card without a map.
+    expect(html(site, "preview")).not.toContain("<iframe");
+  });
+
+  it.each(TEMPLATE_IDS)("%s: no address or area renders no map frame and no Maps link, and the rest of the site still renders", (template) => {
+    const site = as(demo("rasa-kampung"), template);
+    site.sections = site.sections.filter((s) => s.type !== "location");
+    site.business.address = undefined;
+    site.business.area = undefined;
+    for (const out of [html(site), renderToStaticMarkup(<SiteRenderer site={site} mode="preview" maps />)]) {
+      expect(out).not.toContain("<iframe");
+      expect(out).not.toContain("data-site-map-frame");
+      expect(out).not.toContain("google.com/maps");
+      expect(out).toContain("<footer");
+      expect(out).toContain(site.business.name);
+    }
+  });
+});
+
 describe("hero images across templates", () => {
   it.each(TEMPLATE_IDS)("%s: the cover shows once, keeps object-cover and its focus, and frames wide / square / tall photos", (template) => {
     for (const [image, layout] of [[COVER, "overlay"], [SQUARE, "split"], [TALL, "split"]] as const) {

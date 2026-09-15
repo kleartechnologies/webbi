@@ -13,7 +13,9 @@ import { SKINS, type Skin } from "./skin";
 /**
  * "public" is the live site at /w/[slug]. "preview" is the same renderer inside
  * the product (ready screen, editor, landing phone): outbound links open in a
- * new tab and heavy third-party embeds (the Google Maps iframe) are left out.
+ * new tab. The Google Maps iframe is on for "public" and left out of "preview"
+ * unless the caller asks for it (the owner's ready and editor previews do, so
+ * they show the map the live site will; landing mockups don't).
  */
 export type RenderMode = "public" | "preview";
 
@@ -41,6 +43,8 @@ export interface RenderCtx {
   skin: Skin;
   strings: SiteStrings;
   mode: RenderMode;
+  /** Render the keyless Google Maps embed in the location section. */
+  maps: boolean;
   primary: PrimaryCta;
   /** Generic WhatsApp chat link, when the business has a number. */
   chat: string | null;
@@ -53,7 +57,7 @@ export interface RenderCtx {
   rel?: string;
 }
 
-export function buildCtx(site: SiteContent, mode: RenderMode): RenderCtx {
+export function buildCtx(site: SiteContent, mode: RenderMode, options: { maps?: boolean } = {}): RenderCtx {
   const category = getCategory(site.business.category);
   const template = resolveTemplateId(site);
   const number = callNumber(site);
@@ -68,6 +72,7 @@ export function buildCtx(site: SiteContent, mode: RenderMode): RenderCtx {
     skin: SKINS[template],
     strings: siteStrings(site.language),
     mode,
+    maps: options.maps ?? mode === "public",
     primary: { href: ctaHref(site), label: site.cta.label, icon: category.ctaIcon, green },
     chat: chatUrl(site),
     call: number ? telUrl(number) : null,

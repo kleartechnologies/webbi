@@ -23,6 +23,8 @@ export interface SiteRendererProps {
   mode?: RenderMode;
   /** Sticky bottom CTA bar (off for scaled desktop previews). */
   stickyCta?: boolean;
+  /** Google Maps embed in the location section. On for the public site; the owner's previews opt in, landing mockups don't. */
+  maps?: boolean;
   /** Optional strip above the site header (e.g. "This is an example Webbi"). */
   banner?: ReactNode;
   className?: string;
@@ -62,8 +64,8 @@ function renderSection(ctx: RenderCtx, section: SiteSection): ReactNode {
  * server and client components alike. Layout switches on the container width
  * (@md / @3xl), so a scaled 1100px preview gets the desktop layout.
  */
-export function SiteRenderer({ site, mode = "public", stickyCta = true, banner, className }: SiteRendererProps) {
-  const ctx = buildCtx(site, mode);
+export function SiteRenderer({ site, mode = "public", stickyCta = true, maps, banner, className }: SiteRendererProps) {
+  const ctx = buildCtx(site, mode, { maps });
   const nav = buildNav(ctx);
   const sections = site.sections.filter((s) => s.enabled);
   const hero = sections.find((s) => s.type === "hero");

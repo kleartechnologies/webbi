@@ -122,7 +122,7 @@ function Ready({ site }: { site: Site }) {
 function MobilePreview({ site }: { site: SiteContent }) {
   return (
     <div className="h-[540px] overflow-y-auto overscroll-contain rounded-[26px] border border-line shadow-floating [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <SiteRenderer site={site} mode="preview" />
+      <SiteRenderer site={site} mode="preview" maps />
     </div>
   );
 }
@@ -164,7 +164,7 @@ function DesktopPreview({ site, url }: { site: SiteContent; url: string }) {
       <div ref={frame} className="h-[500px] overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div style={{ height: height ? height * scale : undefined }}>
           <div ref={inner} className="origin-top-left" style={{ width: DESKTOP_WIDTH, transform: `scale(${scale})` }}>
-            <SiteRenderer site={site} mode="preview" stickyCta={false} />
+            <SiteRenderer site={site} mode="preview" stickyCta={false} maps />
           </div>
         </div>
       </div>

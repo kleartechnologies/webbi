@@ -34,8 +34,11 @@ const tag = Date.now().toString(36);
 const TEMPLATES = ["bright", "trust", "bold", "elegant", "warm"];
 const DEMOS = ["rasa-kampung", "hafiz-rahman", "sereni", "sejuktech"];
 const COVERS = { wide: { w: 1600, h: 900 }, tall: { w: 1080, h: 1920, position: "top" } };
-/** Every template renders each demo with a wide cover; the car and restaurant demos also get tall, none and long. */
-const VARIANTS = { "rasa-kampung": ["wide", "tall", "none", "long"], "hafiz-rahman": ["wide", "tall", "none", "long"], sereni: ["wide"], sejuktech: ["wide", "none"] };
+/**
+ * Every template renders each demo with a wide cover; the car and restaurant demos also get tall, none and long.
+ * "noloc" is the restaurant without any address, area or location section (an older site that never had one).
+ */
+const VARIANTS = { "rasa-kampung": ["wide", "tall", "none", "long", "noloc"], "hafiz-rahman": ["wide", "tall", "none", "long"], sereni: ["wide"], sejuktech: ["wide", "none"] };
 const VIEWPORTS = {
   mobile: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
   tablet: { width: 768, height: 1024, deviceScaleFactor: 1 },
@@ -77,6 +80,11 @@ function variant(demo, template, kind) {
   const content = structuredClone(DEMO_SITES[demo]);
   content.theme = { ...content.theme, preset: template };
   const hero = content.sections.find((s) => s.type === "hero");
+  if (kind === "noloc") {
+    delete content.business.address;
+    delete content.business.area;
+    content.sections = content.sections.filter((s) => s.type !== "location");
+  }
   if (kind === "none") {
     delete content.business.heroImage;
     delete content.business.heroImagePosition;
@@ -156,12 +164,52 @@ const facts = (page) =>
     };
   });
 
+/** The location section's map as the browser laid it out, next to its Maps button, after scrolling it into view. */
+const mapFacts = (page) =>
+  page.evaluate(async () => {
+    const frames = [...document.querySelectorAll("iframe")];
+    const link = [...document.querySelectorAll("a[href^='https://www.google.com/maps/search/']")][0] ?? null;
+    const frame = frames[0];
+    if (!frame) return { count: 0, link: link?.getAttribute("href") ?? null };
+    frame.scrollIntoView({ block: "center" });
+    await new Promise((r) => setTimeout(r, 150));
+    const vw = document.documentElement.clientWidth;
+    const r = frame.getBoundingClientRect();
+    // The frame's inner box: the iframe is inset-0 inside the border, which templates draw 1–2px wide.
+    const box = { width: frame.parentElement.clientWidth, height: frame.parentElement.clientHeight };
+    const s = getComputedStyle(frame);
+    const l = link?.getBoundingClientRect();
+    const sticky = [...document.querySelectorAll("[data-preset] .sticky")].find((el) => el.className.includes("bottom-0"));
+    const st = sticky && getComputedStyle(sticky).display !== "none" ? sticky.getBoundingClientRect() : null;
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    const overlaps = (a, b) => a && b && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    return {
+      count: frames.length,
+      origins: frames.map((f) => new URL(f.src).origin),
+      src: frame.getAttribute("src"),
+      link: link?.getAttribute("href") ?? null,
+      w: Math.round(r.width),
+      h: Math.round(r.height),
+      inView: r.left >= -1 && r.right <= vw + 1,
+      fillsBox: Math.abs(r.width - box.width) <= 1 && Math.abs(r.height - box.height) <= 1,
+      shown: s.display !== "none" && s.visibility !== "hidden" && Number(s.opacity) > 0,
+      /** The middle of the map is the map itself, not something painted over it. */
+      onTop: hit === frame,
+      overlapsLink: Boolean(overlaps(r, l)),
+      coveredBySticky: Boolean(st && r.top + r.height / 2 > st.top),
+      vw,
+    };
+  });
+
 for (const site of sites) {
   const entry = { site: `${site.template}/${site.demo}/${site.kind}`, slug: site.slug, viewports: {}, checks: [] };
   const check = (ok, label) => { entry.checks.push({ ok, label }); if (!ok) failed++; };
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   const errors = [];
+  const cspErrors = [];
+  // CSP refusals are collected before the Google noise filter, so a blocked map frame can't hide behind it.
+  page.on("console", (m) => { if (/Content Security Policy|Refused to (frame|load|connect)/i.test(m.text())) cspErrors.push(m.text().slice(0, 200)); });
   page.on("console", (m) => { if (m.type() === "error" && !NOISE.test(m.text())) errors.push(m.text().slice(0, 160)); });
   page.on("pageerror", (e) => errors.push(String(e.message ?? e).slice(0, 160)));
   page.on("requestfailed", (req) => { if (!NOISE.test(`${req.url()} ${req.failure()?.errorText ?? ""}`)) errors.push(`request failed ${req.url().slice(0, 120)}`); });
@@ -187,7 +235,43 @@ for (const site of sites) {
       if (vpName === "mobile" || vpName === "desktop") {
         await page.screenshot({ path: path.join(shots, `template-${site.template}-${site.demo}-${site.kind}-${vpName}.png`), fullPage: true });
       }
+
+      // ---- location map: the rendered frame, not just the element ----
+      const m = await mapFacts(page);
+      entry.viewports[vpName].map = m;
+      if (site.kind === "noloc") {
+        check(m.count === 0 && !m.link, at(`no location: no map frame (${m.count}) and no Maps link (${m.link})`));
+      } else {
+        const q = (url, key) => { try { return new URL(url).searchParams.get(key); } catch { return null; } };
+        check(m.count === 1, at(`one map frame (${m.count})`));
+        if (m.count) {
+          check(m.origins.every((o) => o === "https://www.google.com") && /^https:\/\/www\.google\.com\/maps\?q=[^&]+&output=embed$/.test(m.src), at(`map src is the keyless Google Maps embed (${m.src})`));
+          check(Boolean(m.link) && q(m.src, "q") === q(m.link, "query"), at(`map and Maps button show the same place (${q(m.src, "q")} / ${q(m.link, "query")})`));
+          // At least most of the column on a phone; a real map (not a sliver) on bigger screens, without taking over the page.
+          const minW = vp.width < 768 ? Math.min(300, m.vw - 48) : 320;
+          check(m.w >= minW && m.h >= 200 && m.h <= Math.max(640, vp.height), at(`map is ${m.w}×${m.h}`));
+          check(m.shown && m.fillsBox && m.inView && m.onTop, at(`map visible, fills its frame, inside the viewport, not painted over (${JSON.stringify({ shown: m.shown, fillsBox: m.fillsBox, inView: m.inView, onTop: m.onTop })})`));
+          check(!m.overlapsLink && !m.coveredBySticky, at(`map doesn't overlap the Maps button or the sticky bar (${JSON.stringify({ link: m.overlapsLink, sticky: m.coveredBySticky })})`));
+          if (vpName === "mobile" || vpName === "wide") {
+            // The lazy frame is in view now: it must actually navigate to Google's embed page, not an error page.
+            const deadline = Date.now() + 20000;
+            let frame;
+            while (Date.now() < deadline) {
+              frame = page.frames().find((fr) => fr !== page.mainFrame() && /google\.com\/maps/.test(fr.url()));
+              if (frame?.url().includes("/maps/embed")) break;
+              await new Promise((r) => setTimeout(r, 400));
+            }
+            check(Boolean(frame?.url().includes("/maps/embed")), at(`map frame loaded Google's embed page (${frame?.url().slice(0, 60) ?? "no frame"})`));
+            if (site.kind === "wide") {
+              await new Promise((r) => setTimeout(r, 1500));
+              const section = await page.evaluateHandle(() => document.querySelector("iframe").closest("section"));
+              await section.asElement().screenshot({ path: path.join(shots, `template-${site.template}-${site.demo}-map-${vpName}.png`) });
+            }
+          }
+        }
+      }
     }
+    check(cspErrors.length === 0, `no CSP violations (${cspErrors.slice(0, 2).join(" | ") || "none"})`);
     check(errors.length === 0, `no console errors (${errors.slice(0, 3).join(" | ") || "none"})`);
   } catch (err) {
     check(false, `crashed: ${String(err.message).split("\n")[0]}`);

@@ -377,7 +377,7 @@ function PreviewOverlay({ site, onClose }: { site: SiteContent; onClose: () => v
       </div>
       <div className="flex-1 overflow-y-auto overscroll-contain">
         <div className="mx-auto min-h-full w-full max-w-[560px] bg-surface">
-          <SiteRenderer site={site} mode="preview" />
+          <SiteRenderer site={site} mode="preview" maps />
         </div>
       </div>
     </div>
