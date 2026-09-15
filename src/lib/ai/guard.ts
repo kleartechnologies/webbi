@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getAiProvider, type AiProvider } from "@/lib/ai";
 import { requireUser, type VerifiedUser } from "@/lib/auth/verify";
 import { adminDb } from "@/lib/firebase/admin";
+import { requireAppCheck } from "@/lib/security/appCheck";
 import { quotaDay, SITE_ID } from "@/lib/site/drafts";
 import { isSuspended, SUSPENDED_MESSAGE } from "@/lib/site/moderationCore";
 import { PublishError } from "@/lib/site/publish";
@@ -32,12 +33,50 @@ import { AiError, AiQuotaError } from "./errors";
  * looped for free. The one exception is a provider that turned the request away
  * before doing anything (not configured, key rejected, out of credit, rate
  * limited): that request is given back.
+ *
+ * aiBudget/day-{YYYY-MM-DD} and aiBudget/month-{YYYY-MM} count every AI request
+ * on Webbi, whoever made it, against a platform-wide budget (a cap on total
+ * provider spend if many accounts are created). They are read, checked and
+ * counted in the same transaction as the account's and website's counts, so
+ * the budget can't be overshot by requests racing each other. A refused
+ * request tells the customer only that the AI is busy; the reason is logged.
+ *
+ * Tradeoff: every AI request writes the same two budget documents, so AI
+ * requests commit one after another. That's fine at Webbi's volume (an AI
+ * request takes seconds; Firestore allows roughly one sustained write a second
+ * per document before contention). Past that, split each budget across a few
+ * shard documents and give each shard a slice of the limit.
  */
 
 export { AiQuotaError, type AiQuotaReason } from "./errors";
 
 export const AI_DAILY_LIMIT = 10;
 export const AI_MONTHLY_LIMIT = 30;
+/** Webbi-wide AI requests (understand + generate together). Override with AI_GLOBAL_DAILY_LIMIT / AI_GLOBAL_MONTHLY_LIMIT. */
+export const AI_GLOBAL_DAILY_DEFAULT = 500;
+export const AI_GLOBAL_MONTHLY_DEFAULT = 6000;
+
+/**
+ * A whole number from the environment. Blank or malformed falls back to the
+ * default (a typo never removes the budget); 0 turns the AI off.
+ */
+function budgetLimit(value: string | undefined, fallback: number): number {
+  const text = value?.trim();
+  if (!text || !/^\d{1,9}$/.test(text)) return fallback;
+  return Number(text);
+}
+
+export function aiGlobalLimits(): { daily: number; monthly: number } {
+  return {
+    daily: budgetLimit(process.env.AI_GLOBAL_DAILY_LIMIT, AI_GLOBAL_DAILY_DEFAULT),
+    monthly: budgetLimit(process.env.AI_GLOBAL_MONTHLY_LIMIT, AI_GLOBAL_MONTHLY_DEFAULT),
+  };
+}
+
+interface AiBudgetDoc {
+  period: string;
+  count: number;
+}
 /** Per website, for each kind of request: the first run plus two more. */
 export const AI_SITE_LIMIT = { understand: 3, generate: 3 } as const;
 /**
@@ -61,6 +100,7 @@ const GUEST = "Create an account to use Webbi's AI.";
 export async function requireAiAccount(request: Request): Promise<VerifiedUser> {
   const user = await requireUser(request);
   if (user.isAnonymous) throw new PublishError("forbidden", GUEST);
+  await requireAppCheck(request, "ai");
   return user;
 }
 
@@ -102,8 +142,21 @@ export async function runAiJob<Req, Res>(job: AiJob<Req, Res>): Promise<Res> {
   const field = SITE_COUNT[kind];
   const requestId = randomUUID();
 
+  const limits = aiGlobalLimits();
+  // Keyed by the Malaysia day and month at the moment the request is made.
+  const periodDay = quotaDay(new Date());
+  const periodMonth = periodDay.slice(0, 7);
+  const dayBudgetRef = db.doc(`aiBudget/day-${periodDay}`);
+  const monthBudgetRef = db.doc(`aiBudget/month-${periodMonth}`);
+
   const reserved = await db.runTransaction(async (tx) => {
-    const [siteSnap, usageSnap, quotaSnap] = await tx.getAll(siteRef, usageRef, quotaRef);
+    const [siteSnap, usageSnap, quotaSnap, dayBudgetSnap, monthBudgetSnap] = await tx.getAll(
+      siteRef,
+      usageRef,
+      quotaRef,
+      dayBudgetRef,
+      monthBudgetRef,
+    );
     const site = siteSnap.exists ? (siteSnap.data() as SiteDoc) : null;
     if (!site) throw new PublishError("not_found", "We couldn't find that website.");
     if (site.ownerUid !== user.uid) throw new PublishError("forbidden", "This website belongs to another account.");
@@ -114,8 +167,8 @@ export async function runAiJob<Req, Res>(job: AiJob<Req, Res>): Promise<Res> {
     const request = job.prepare(site);
 
     const now = Date.now();
-    const day = quotaDay(new Date(now));
-    const month = day.slice(0, 7);
+    const day = periodDay;
+    const month = periodMonth;
     const quota = (quotaSnap.data() ?? {}) as Partial<UserQuotaDoc>;
     const usage = (usageSnap.data() ?? {}) as Partial<SiteAiDoc>;
     // Missing counters (accounts and drafts from before these limits) start at zero.
@@ -128,8 +181,30 @@ export async function runAiJob<Req, Res>(job: AiJob<Req, Res>): Promise<Res> {
     if (today >= AI_DAILY_LIMIT) throw new AiQuotaError("daily_limit");
     if (thisMonth >= AI_MONTHLY_LIMIT) throw new AiQuotaError("monthly_limit");
 
-    // The lock and both counts land together or not at all.
+    // Webbi-wide budget. A malformed counter counts as spent (fail closed).
+    const spent = (snap: typeof dayBudgetSnap) => {
+      if (!snap.exists) return 0;
+      const count = (snap.data() as Partial<AiBudgetDoc>).count;
+      return typeof count === "number" && Number.isFinite(count) && count >= 0 ? count : Number.POSITIVE_INFINITY;
+    };
+    const globalToday = spent(dayBudgetSnap);
+    const globalThisMonth = spent(monthBudgetSnap);
+    if (globalToday >= limits.daily || globalThisMonth >= limits.monthly) {
+      console.warn("[ai] Webbi-wide AI budget reached; request refused", {
+        scope: globalToday >= limits.daily ? "daily" : "monthly",
+        day,
+        month,
+        globalToday,
+        globalThisMonth,
+        limits,
+      });
+      throw new AiQuotaError("global_limit");
+    }
+
+    // The lock and every count land together or not at all.
     const stamp = FieldValue.serverTimestamp();
+    tx.set(dayBudgetRef, { period: day, count: globalToday + 1, updatedAt: stamp }, { merge: true });
+    tx.set(monthBudgetRef, { period: month, count: globalThisMonth + 1, updatedAt: stamp }, { merge: true });
     tx.set(
       usageRef,
       { ownerUid: user.uid, [field]: forSite + 1, lock: { requestId, kind, startedAt: now }, updatedAt: stamp },
@@ -147,7 +222,13 @@ export async function runAiJob<Req, Res>(job: AiJob<Req, Res>): Promise<Res> {
   async function finish(outcome: { result: Res } | { refund: boolean }): Promise<void> {
     const refund = "refund" in outcome && outcome.refund;
     await db.runTransaction(async (tx) => {
-      const [siteSnap, usageSnap, quotaSnap] = await tx.getAll(siteRef, usageRef, quotaRef);
+      const [siteSnap, usageSnap, quotaSnap, dayBudgetSnap, monthBudgetSnap] = await tx.getAll(
+        siteRef,
+        usageRef,
+        quotaRef,
+        dayBudgetRef,
+        monthBudgetRef,
+      );
       const stamp = FieldValue.serverTimestamp();
 
       const site = siteSnap.exists ? (siteSnap.data() as SiteDoc) : null;
@@ -174,6 +255,14 @@ export async function runAiJob<Req, Res>(job: AiJob<Req, Res>): Promise<Res> {
         if (quota.aiDay === reserved.day && today > 0) patch.aiRequestsToday = today - 1;
         if (quota.aiMonth === reserved.month && thisMonth > 0) patch.aiRequestsThisMonth = thisMonth - 1;
         if (Object.keys(patch).length) tx.update(quotaRef, { ...patch, updatedAt: stamp });
+      }
+
+      // The budget documents are keyed by period, so a refund always lands in the one it was counted in.
+      if (refund) {
+        for (const snap of [dayBudgetSnap, monthBudgetSnap]) {
+          const count = snap.exists ? (snap.data() as Partial<AiBudgetDoc>).count : undefined;
+          if (typeof count === "number" && count > 0) tx.update(snap.ref, { count: count - 1, updatedAt: stamp });
+        }
       }
     });
   }

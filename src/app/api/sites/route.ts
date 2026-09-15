@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError, handleApiError } from "@/lib/api/http";
 import { requireUser } from "@/lib/auth/verify";
+import { requireAppCheck } from "@/lib/security/appCheck";
 import { createDraftSite } from "@/lib/site/drafts";
 import { understandingSchema } from "@/lib/site/schema";
 
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
     if (user.isAnonymous) {
       return apiError(403, "forbidden", "Create an account before you start a website.");
     }
+    await requireAppCheck(request, "sites.create");
     const input = bodySchema.parse(await request.json().catch(() => null));
     const siteId = await createDraftSite(user.uid, input);
     return NextResponse.json({ siteId }, { status: 201 });

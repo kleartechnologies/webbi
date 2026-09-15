@@ -56,7 +56,7 @@ One Next.js app serves everything. Each customer website is a validated JSON doc
 | `/` | Landing (design screen 01) |
 | `/start` → `/s/{siteId}/confirm` → `/content` → `/generating` → `/ready` | Onboarding: description → "AI understands" → confirm details → generation → full free preview |
 | `/s/{siteId}/edit` | Structured editor (text, photos, sections, theme preset, colour) with autosave |
-| `/s/{siteId}/account` → `/publish` → `/publish/return` → `/live` | Sign in (guest sites are kept), choose slug, pay, confirm, share |
+| `/s/{siteId}/account` → `/publish` → `/publish/return` → `/live` | Sign in, verify the email address (Google accounts don't need to), choose slug, pay, confirm, share |
 | `/dashboard`, `/signin` | Owner's sites and sign-in |
 | `/w/{slug}` | Public renderer. Reads `publicSites/{slug}` (cached, invalidated on publish) or a built-in demo site |
 | `/api/sites`, `/api/sites/delete` | Start a website (one unpublished website per account, 3 starts a day) and delete an unpaid draft |
@@ -65,19 +65,23 @@ One Next.js app serves everything. Each customer website is a validated JSON doc
 | `/api/publish/slug`, `/checkout`, `/confirm`, `/republish` | Slug availability, Billplz bill creation, return-page payment confirmation, push edits to a paid site |
 | `/api/payments/webhook` | Billplz payment callback (X Signature verified) |
 
-Starting a website needs a signed-in account (not a guest). `POST /api/sites` runs one Admin SDK transaction on `userQuotas/{uid}`: it refuses with 409 while the account has an unpublished site (pending, failed or unpaid payments included) and with 429 after 3 starts in the current Malaysia day. Publishing (a verified payment) or deleting the draft frees the slot; deleting never gives back a start. Accounts that already had several drafts before this limit keep all of them untouched; their oldest draft (by `createdAt`) is treated as the one in progress until it is published or deleted.
+Starting a website needs a signed-in Google or email/password account (Anonymous sign-in is disabled; a leftover anonymous session is treated as signed out in the app and refused by the API). `POST /api/sites` runs one Admin SDK transaction on `userQuotas/{uid}`: it refuses with 409 while the account has an unpublished site (pending, failed or unpaid payments included) and with 429 after 3 starts in the current Malaysia day. Publishing (a verified payment) or deleting the draft frees the slot; deleting never gives back a start. Accounts that already had several drafts before this limit keep all of them untouched; their oldest draft (by `createdAt`) is treated as the one in progress until it is published or deleted.
 
 AI cost protection (`src/lib/ai/guard.ts`). The only code that reaches a model provider is `runAiJob`, used by the two AI routes. Each request:
 
-1. needs a signed-in account (401 without one, 403 for a guest) and names a website that exists (404), belongs to the caller and isn't published (403);
+1. needs a signed-in account (401 without one, 403 for an anonymous session), passes App Check when `APP_CHECK_MODE=enforce` (401), and names a website that exists (404), belongs to the caller and isn't published (403);
 2. is rebuilt from what is saved on that site: the description, the confirmed details, the language. Nothing else in the body is read, so the browser can't choose the model, the prompt or `max_completion_tokens`;
-3. passes one Firestore transaction that refuses with **409** while another AI request for the same website holds its lock, and **429** once the website has had 3 reads of its description or 3 builds (the first plus two rebuilds), or the account has made **10 AI requests today** or **30 this month** (Malaysia calendar day and month; reading a description and building a website share that allowance). A refused request calls nothing and counts nothing;
-4. takes the lock and counts the request in that same transaction, and only then calls the provider;
+3. passes one Firestore transaction that refuses with **409** while another AI request for the same website holds its lock, and **429** once the website has had 3 reads of its description or 3 builds (the first plus two rebuilds), or the account has made **10 AI requests today** or **30 this month** (Malaysia calendar day and month; reading a description and building a website share that allowance), or **all of Webbi** has used its AI budget for today or this month (see below). A refused request calls nothing and counts nothing;
+4. takes the lock and counts the request (on the account, the website and the Webbi-wide budget) in that same transaction, and only then calls the provider;
 5. saves the result on the site and releases the lock in a second transaction. A lock left behind by a request that died (a crash, or the platform stopping the function) is taken over after 2 minutes.
 
 An accepted request that fails still counts (a timeout, a provider error or an unusable answer), since the provider may already have billed it. It is given back only when the provider turned it away before doing any work: no key, a rejected key, an unknown model, no credit left, or rate limited. Providers retry at most once. The build allows up to 16,384 output tokens: a full draft can reach about 10,000 tokens of JSON, plus reasoning tokens. Responses never include provider messages, keys, setting names or stack traces.
 
-**Operational spending cap.** The limits above cap requests per account, not total spend across many accounts. Set a hard monthly ceiling on the OpenAI side as well: in the OpenAI platform dashboard, set the project's monthly budget and usage limits (Settings → Limits / Billing; the wording may change), and prefer prepaid credits with auto-recharge off, so spend stops when the credit runs out. The key and the ceiling live only in the OpenAI dashboard and the server environment, never in this repository.
+**Webbi-wide AI budget.** Per-account limits don't stop many accounts together from running up the bill, so the same transaction also counts every request in `aiBudget/day-{YYYY-MM-DD}` and `aiBudget/month-{YYYY-MM}` (server-only documents). Defaults are **500 a day** and **6,000 a month**; set `AI_GLOBAL_DAILY_LIMIT` / `AI_GLOBAL_MONTHLY_LIMIT` to change them (not a whole number = the default, `0` = AI off). It fails closed: a counter that can't be read as a number refuses the request. The user sees only "Webbi's AI is busy right now. Please try again later." (429 `rate_limited`); the function log says `[ai] Webbi-wide AI budget reached` with the scope. A request the provider turned away before doing any work is given back to the budget as well.
+
+Tradeoff: every AI request in the whole product now writes the same two documents, so AI requests are serialised through them. Firestore sustains roughly one write per second per document before contention retries and latency grow; at today's volume (well under that, since a generation takes several seconds) this costs nothing. If AI traffic ever approaches about one request per second, shard the counters (e.g. `day-{date}-{0..N}` summed on read) or move the budget to a dedicated counter service.
+
+**Operational spending cap.** The limits above cap requests, not money. Set a hard monthly ceiling on the OpenAI side as well: in the OpenAI platform dashboard, set the project's monthly budget and usage limits (Settings → Limits / Billing; the wording may change), and prefer prepaid credits with auto-recharge off, so spend stops when the credit runs out. The key and the ceiling live only in the OpenAI dashboard and the server environment, never in this repository.
 
 Firestore collections (rules in `firestore.rules`):
 
@@ -88,6 +92,7 @@ Firestore collections (rules in `firestore.rules`):
 | `siteModeration/{siteId}` | server-only | why a website was suspended (see Moderation) |
 | `userQuotas/{uid}` | server-only | `openDraftSiteId` (the account's one unpublished website), `draftsCreatedToday` / `draftsDay` (Malaysia calendar day), AI requests `aiRequestsToday` / `aiDay` and `aiRequestsThisMonth` / `aiMonth`, and photo uploads `uploadsToday` / `uploadsDay` |
 | `siteAi/{siteId}` | server-only | one small document per website: `understandings`, `generations` and the AI `lock`; deleted with the draft |
+| `aiBudget/{period}` | server-only | Webbi-wide AI request `count` for `day-{YYYY-MM-DD}` and `month-{YYYY-MM}` (Malaysia time) |
 | `publicSites/{slug}` | anyone can get one by its link, nobody can list; server-only writes | the published copy of a site, plus `siteId` (never the owner); a content-free marker while suspended |
 | `slugs/{slug}` | server-only | slug → siteId reservation, claimed inside the payment transaction |
 | `payments/{id}` | owner reads, server-only writes | one record per checkout: provider, amount, status |
@@ -96,7 +101,7 @@ Unpublished sites are never readable by anyone but their owner.
 
 Photo uploads (`src/lib/images/storage.ts`). The browser resizes a photo (1600px WebP, as before) and POSTs its bytes to `/api/sites/images?siteId=…`. `storage.rules` refuse every browser write and delete, the owner's included, so this route is the only way in. Each upload:
 
-1. needs a signed-in account (401 without one, 403 for a guest) and a website that exists (404), belongs to the caller (403) and is a draft or a paid live site (the editor changes live sites before a republish);
+1. needs a signed-in account (401 without one, 403 for an anonymous session), passes App Check when `APP_CHECK_MODE=enforce` (401), and a website that exists (404), belongs to the caller (403) and is a draft or a paid live site (the editor changes live sites before a republish);
 2. is at most **5 MB** (413; the body is read in a stream and dropped at the limit);
 3. is a **JPEG, PNG or WebP by its bytes**: the file signature and header are parsed (`src/lib/images/sniff.ts`, no image library), and the declared Content-Type must match what the bytes are (415). SVG, HTML, anything disguised as an image and unreadable headers are refused. Rules can't read file bytes, which is why the check lives on the server and browsers can't write at all;
 4. counts against **50 uploads a Malaysia day per account** (429). The count is taken in a transaction and given back if the upload then fails; refused uploads never count, and removing a photo never gives one back;
@@ -119,9 +124,30 @@ Public Firebase values (`NEXT_PUBLIC_FIREBASE_*`) are safe to expose and are gov
 | `OPENAI_MODEL` | model override (default `gpt-5-mini`) | optional |
 | `AI_PROVIDER` | `openai` \| `anthropic` \| `mock` | optional; unset = pick from the configured key (`OPENAI_API_KEY` first) |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | alternative provider | optional; only used when `AI_PROVIDER=anthropic` or no OpenAI key is set |
+| `AI_GLOBAL_DAILY_LIMIT`, `AI_GLOBAL_MONTHLY_LIMIT` | Webbi-wide AI budget | optional; defaults 500 / 6000, `0` turns the AI off (see "AI cost protection") |
+| `APP_CHECK_MODE` | App Check on the server: `off` \| `monitor` \| `enforce` | optional, default `off` (see "App Check") |
+| `NEXT_PUBLIC_FIREBASE_APPCHECK_SITE_KEY` | App Check in the browser (reCAPTCHA Enterprise site key; public) | Firebase Console → App Check. `NEXT_PUBLIC_FIREBASE_APPCHECK_DEBUG_TOKEN` is for local development only |
 | `PAYMENT_PROVIDER`, `BILLPLZ_SECRET_KEY`, `BILLPLZ_COLLECTION_ID`, `BILLPLZ_X_SIGNATURE_KEY`, `BILLPLZ_BASE_URL` | Publish → payment | See "Payments" below. With the three Billplz keys set and `PAYMENT_PROVIDER` unset, Billplz takes payments; with `PAYMENT_PROVIDER=none` (or no keys) the Publish screen explains that payments are not switched on yet. Nothing is ever marked paid or published without a verified payment. `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` are only for the Stripe reference adapter. |
 
-Firebase Authentication must be enabled once in the Firebase Console (Authentication → Get started) with the **Anonymous**, **Google** and **Email/Password** providers, and the Netlify domain added under Authorized domains.
+Firebase Authentication must be enabled once in the Firebase Console (Authentication → Get started) with the **Google** and **Email/Password** providers only (**Anonymous must be off**), **email enumeration protection** on, and the Netlify domain added under Authorized domains.
+
+### Email verification
+
+Email/password accounts get a Firebase verification email right after sign-up (`sendEmailVerification`, continuing to `/dashboard`). Until they click it they can build, edit and preview, but not publish. Google accounts are treated as verified and never see a prompt. The form only trims the address and checks it is plausibly shaped; free providers (`try@yahoo.com`, Gmail, Outlook…) are normal addresses.
+
+- **Browser** (`EmailVerificationNotice`): "Please verify your email before publishing your website." with the address, **Resend email** (60 s cooldown, also after Firebase's `too-many-requests`) and **I've verified** (reloads the user and forces a fresh ID token). Shown on the dashboard, the Publish screen (Pay disabled) and the payment return page. Nobody is signed out.
+- **Server, token claims** (`assertMayPublish`, `src/lib/auth/publishing.ts`): `/api/publish/checkout` and `/api/publish/republish` answer **403 `email_unverified`** unless the ID token says `email_verified` or the account has a `google.com` identity.
+- **Server, Firebase Auth record** (`publishStanding`, `src/lib/auth/accounts.ts`, Identity Toolkit `accounts:lookup` with the Admin credential): every fulfilment path (payment callback, return-page confirm, Pay again on a paid payment, open-bill reuse, `retryPaymentFulfilment`, draft deletion's settle) asks Auth itself before publishing, because the callback carries no user token. An unverified (or disabled, or missing) owner's payment is kept **paid** with `needsAttention: true`, `attentionReason: "email_unverified"`: not failed, not refunded, website not published, draft slot held. Once they verify, pressing Pay again (no new bill), a repeated callback or a retry publishes that same payment. If Auth can't be reached the payment is held as `fulfilment_error` (transient, the callback gets a 500 so Billplz retries); it never publishes on a failed lookup.
+
+Existing unverified email/password accounts are not signed out or deleted; they see the prompt and must verify before their next publish or republish.
+
+### App Check
+
+Client: `src/lib/firebase/appCheck.ts` starts App Check with **reCAPTCHA Enterprise** (invisible, score-based; no CAPTCHA to click) only when `NEXT_PUBLIC_FIREBASE_APPCHECK_SITE_KEY` is set and the emulators aren't in use, and `src/lib/api/client.ts` / the photo upload add `X-Firebase-AppCheck` to API calls. If a token can't be had the request goes out without one. The CSP only allows reCAPTCHA and App Check hosts when the site key is set.
+
+Server: `requireAppCheck` (`src/lib/security/appCheck.ts`) verifies the token with `jose` against App Check's public JWKS (issuer `https://firebaseappcheck.googleapis.com/{projectNumber}`, audience `projects/{projectNumber}`, subject = this web app id). It guards `POST /api/sites`, `/api/sites/images` and both AI routes. Payment callbacks and the return page are deliberately not guarded (Billplz and slow redirects can't carry a token; they are protected by signatures). Sign-in itself is protected by Firebase Auth's own App Check enforcement in the Console, not by Webbi's server.
+
+Rollout: `APP_CHECK_MODE=off` (default: dev, tests, emulators need nothing) → set the site key and `monitor` (logs `[app-check] would refuse` with route and reason, lets requests through) → watch the logs and App Check metrics for a few days → `enforce` (401 `app_check_failed`, "We couldn't verify this browser. Refresh the page and try again."). Rollback is `APP_CHECK_MODE=off` (Netlify applies a changed variable on the next deploy). Keep Firebase Console enforcement for Authentication, Firestore and Storage off until monitor-mode metrics show nearly all requests verified; enforcing there blocks the browser SDK directly, which Webbi's server can't soften.
 
 ## Payments
 
@@ -172,7 +198,7 @@ End-to-end check of the whole product against the emulators (needs the emulator 
 QA_BASE_URL=http://localhost:3000 npm run qa:publish
 ```
 
-`scripts/qa/publish-flow.mjs` drives a phone-sized headless Chrome through onboarding, guest → account, slug validation, mock payment, the live page, the public `/w/{slug}` page as a signed-out visitor, "Publish changes" from the editor, the dashboard, slug collisions, cancelled checkouts and bogus return sessions, and checks the resulting Firestore documents. Screenshots land in `scripts/qa/shots/`. Set `QA_CHROME` if Chrome isn't at the default macOS path.
+`scripts/qa/publish-flow.mjs` drives a phone-sized headless Chrome through sign-up (the email is verified through the Auth emulator's `oobCodes` endpoint), onboarding, slug validation, mock payment, the live page, the public `/w/{slug}` page as a signed-out visitor, "Publish changes" from the editor, the dashboard, slug collisions, cancelled checkouts and bogus return sessions, and checks the resulting Firestore documents. Screenshots land in `scripts/qa/shots/`. Set `QA_CHROME` if Chrome isn't at the default macOS path.
 
 Two more harnesses cover the per-industry output against the same server:
 
@@ -199,7 +225,7 @@ npm run build && npx next start
 QA_SITE_SLUGS=some-published-slug npm run qa:headers   # headers on pages and API, no CORS grant, framing blocked, CSP violations in Chrome, photos + Maps on /w/ pages
 ```
 
-Each `qa:industries` / `qa:publish` run against the real project leaves anonymous Auth users and their draft `sites` docs behind. `npm run qa:cleanup` lists them (dry run; needs `gcloud auth login`), and `npm run qa:cleanup -- --apply` deletes them. It only removes users with no sign-in provider or email, their draft sites, and orphaned `users` docs.
+Each `qa:industries` / `qa:publish` run against the real project leaves Auth users and their draft `sites` docs behind. `npm run qa:cleanup` lists them (dry run; needs `gcloud auth login`), and `npm run qa:cleanup -- --apply` deletes them. It only removes users with no sign-in provider or email (older anonymous QA users), their draft sites, and orphaned `users` docs; the `qa-…@example.com` email accounts QA now creates must be deleted in the Console. Against the real project the QA email can't be verified automatically, so run the publish QA against the emulators.
 
 ## Security headers
 
@@ -247,7 +273,7 @@ Environment variables to set under Site configuration → Environment variables 
 
 ### Before launch
 
-1. Firebase Console → Authentication → Sign-in method: enable **Anonymous**, **Google**, **Email/Password**; Settings → Authorized domains: `webbi.online` and `www.webbi.online` (already added) and the Netlify domain.
+1. Firebase Console → Authentication → Sign-in method: enable **Google** and **Email/Password**, keep **Anonymous disabled**; Settings → User actions: **Email enumeration protection** on; Settings → Authorized domains: `webbi.online` and `www.webbi.online` (already added) and the Netlify domain.
 2. Firebase Console → Project settings → Service accounts → generate a key → `FIREBASE_SERVICE_ACCOUNT_BASE64` on Netlify (set as a **secret**, which Netlify only allows for the production / deploy-preview / branch-deploy contexts). Already set. Without it every `/api/*` route answers 503 `admin_not_configured` (the details go to the function log, not the response).
 3. `OPENAI_API_KEY` on Netlify (`AI_PROVIDER` unset or `openai`). Already set.
 4. Payments: Billplz, production API. The four `BILLPLZ_*` variables are set on Netlify, and with `PAYMENT_PROVIDER` unset they switch payments on. X Signature must be on in the Billplz account (see Payments). `PAYMENT_PROVIDER=none` is the off switch; `mock` is refused in production builds.

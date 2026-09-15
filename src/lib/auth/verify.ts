@@ -16,6 +16,13 @@ export interface VerifiedUser {
   email?: string;
   /** Display name from the sign-in, when there is one. Used to address the payment bill. */
   name?: string;
+  /**
+   * Firebase's signed email_verified claim. Missing counts as not verified, so
+   * a caller built without it can never publish (src/lib/auth/publishing.ts).
+   */
+  emailVerified?: boolean;
+  /** Sign-in providers linked to the account when the token was issued ("password", "google.com"). */
+  providers?: string[];
 }
 
 export class UnauthorizedError extends Error {
@@ -26,9 +33,22 @@ export class UnauthorizedError extends Error {
 }
 
 interface FirebaseClaims extends JWTPayload {
-  firebase?: { sign_in_provider?: string };
+  firebase?: { sign_in_provider?: string; identities?: Record<string, unknown> };
   email?: string;
+  email_verified?: boolean;
   name?: string;
+}
+
+/** Every provider on the account: the one used for this sign-in plus the linked identities. */
+function tokenProviders(claims: FirebaseClaims): string[] {
+  const providers = new Set<string>();
+  const signIn = claims.firebase?.sign_in_provider;
+  if (typeof signIn === "string") providers.add(signIn);
+  const identities = claims.firebase?.identities;
+  if (identities && typeof identities === "object") {
+    for (const key of Object.keys(identities)) providers.add(key === "email" ? "password" : key);
+  }
+  return [...providers];
 }
 
 /** Emulator tokens are unsigned; accept them only in local development. */
@@ -58,6 +78,8 @@ export async function verifyIdToken(token: string): Promise<VerifiedUser> {
     isAnonymous: payload.firebase?.sign_in_provider === "anonymous",
     email: payload.email,
     name: typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : undefined,
+    emailVerified: payload.email_verified === true,
+    providers: tokenProviders(payload),
   };
 }
 

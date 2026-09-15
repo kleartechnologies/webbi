@@ -153,6 +153,8 @@ export type PaymentStatus = "pending" | "paid" | "failed";
  */
 export type PaymentAttentionReason =
   | "site_suspended"
+  /** Paid by an email/password account that hasn't verified its address. Publishes once it has. */
+  | "email_unverified"
   | "fulfilment_pending"
   | "invalid_draft"
   | "slug_unavailable"

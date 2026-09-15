@@ -8,7 +8,15 @@ import { POST as removeRoute } from "@/app/api/sites/delete/route";
 import { POST as createRoute } from "@/app/api/sites/route";
 import { getAiProvider, type AiProvider } from "@/lib/ai";
 import { AiError } from "@/lib/ai/errors";
-import { AI_DAILY_LIMIT, AI_LOCK_TTL_MS, AI_MONTHLY_LIMIT, AI_SITE_LIMIT } from "@/lib/ai/guard";
+import {
+  AI_DAILY_LIMIT,
+  AI_GLOBAL_DAILY_DEFAULT,
+  AI_GLOBAL_MONTHLY_DEFAULT,
+  AI_LOCK_TTL_MS,
+  AI_MONTHLY_LIMIT,
+  AI_SITE_LIMIT,
+  aiGlobalLimits,
+} from "@/lib/ai/guard";
 import { createOpenAiProvider } from "@/lib/ai/openai";
 import { requireUser, UnauthorizedError, type VerifiedUser } from "@/lib/auth/verify";
 import { quotaDay } from "@/lib/site/drafts";
@@ -362,6 +370,102 @@ describe("limits", () => {
     expect(provider.generate).not.toHaveBeenCalled();
     expect(quota(owner.uid)).toMatchObject({ aiRequestsThisMonth: AI_MONTHLY_LIMIT, aiDay: "2000-01-01" });
     expect(usage(siteId)).toBeUndefined();
+  });
+
+  describe("Webbi-wide AI budget", () => {
+    const BUSY_GLOBAL = "Webbi's AI is busy right now. Please try again later.";
+    const dayBudget = () => db.read(`aiBudget/day-${day()}`);
+    const monthBudget = () => db.read(`aiBudget/month-${month()}`);
+
+    it("counts every account's requests in the day and month budget, in the same transaction as the account's own", async () => {
+      const a = person();
+      const b = person();
+      expect((await generate(a, { siteId: seedDraft(a.uid) })).status).toBe(200);
+      expect((await generate(b, { siteId: seedDraft(b.uid) })).status).toBe(200);
+      expect(dayBudget()).toMatchObject({ period: day(), count: 2 });
+      expect(monthBudget()).toMatchObject({ period: month(), count: 2 });
+      expect(quota(a.uid)).toMatchObject({ aiRequestsToday: 1 });
+    });
+
+    it("refuses once today's budget is spent (429, generic message, no reason), without calling the provider or counting anything", async () => {
+      vi.stubEnv("AI_GLOBAL_DAILY_LIMIT", "5");
+      db.seed(`aiBudget/day-${day()}`, { period: day(), count: 5 });
+      const owner = person();
+      const siteId = seedDraft(owner.uid);
+
+      const res = await generate(owner, { siteId });
+
+      expect(res.status).toBe(429);
+      expect(res.body.error).toEqual({ code: "rate_limited", message: BUSY_GLOBAL });
+      expect(res.body.error).not.toHaveProperty("reason");
+      expect(JSON.stringify(res.body)).not.toMatch(/global|budget|daily|monthly/i);
+      expect(provider.generate).not.toHaveBeenCalled();
+      expectUntouched(owner.uid, siteId);
+      expect(dayBudget()).toMatchObject({ count: 5 });
+      expect(monthBudget()).toBeUndefined();
+      expect(console.warn).toHaveBeenCalledWith("[ai] Webbi-wide AI budget reached; request refused", expect.objectContaining({ scope: "daily" }));
+    });
+
+    it("refuses once this month's budget is spent, even on a fresh day", async () => {
+      vi.stubEnv("AI_GLOBAL_MONTHLY_LIMIT", "7");
+      db.seed(`aiBudget/month-${month()}`, { period: month(), count: 7 });
+      const owner = person();
+      const siteId = seedDraft(owner.uid, { generation: { status: "understanding" } });
+
+      const res = await understand(owner, { siteId });
+
+      expect(res.status).toBe(429);
+      expect(res.body.error).toEqual({ code: "rate_limited", message: BUSY_GLOBAL });
+      expect(provider.understand).not.toHaveBeenCalled();
+      expectUntouched(owner.uid, siteId);
+      expect(console.warn).toHaveBeenCalledWith("[ai] Webbi-wide AI budget reached; request refused", expect.objectContaining({ scope: "monthly" }));
+    });
+
+    it("fails closed on a malformed counter", async () => {
+      for (const count of ["3", -1, null, Number.NaN]) {
+        db.seed(`aiBudget/day-${day()}`, { period: day(), count });
+        const owner = person();
+        const siteId = seedDraft(owner.uid);
+        expect((await generate(owner, { siteId })).status, String(count)).toBe(429);
+        expectUntouched(owner.uid, siteId);
+      }
+      expect(provider.generate).not.toHaveBeenCalled();
+    });
+
+    it("lets exactly the last request under the budget through when two race for it", async () => {
+      vi.stubEnv("AI_GLOBAL_DAILY_LIMIT", "1");
+      const a = person();
+      const b = person();
+      const results = await Promise.all([generate(a, { siteId: seedDraft(a.uid) }), generate(b, { siteId: seedDraft(b.uid) })]);
+      expect(results.map((r) => r.status).sort()).toEqual([200, 429]);
+      expect(provider.generate).toHaveBeenCalledTimes(1);
+      expect(dayBudget()).toMatchObject({ count: 1 });
+    });
+
+    it("gives a request back to the budget when the provider turned it away before doing any work", async () => {
+      provider.generate.mockRejectedValueOnce(new AiError("rate_limited", "slow down"));
+      const owner = person();
+      const siteId = seedDraft(owner.uid);
+      expect((await generate(owner, { siteId })).status).toBe(429);
+      expect(dayBudget()).toMatchObject({ count: 0 });
+      expect(monthBudget()).toMatchObject({ count: 0 });
+    });
+
+    it("reads its limits from the environment: a typo keeps the default, 0 switches the AI off", async () => {
+      expect(aiGlobalLimits()).toEqual({ daily: AI_GLOBAL_DAILY_DEFAULT, monthly: AI_GLOBAL_MONTHLY_DEFAULT });
+      vi.stubEnv("AI_GLOBAL_DAILY_LIMIT", "250");
+      vi.stubEnv("AI_GLOBAL_MONTHLY_LIMIT", "3000");
+      expect(aiGlobalLimits()).toEqual({ daily: 250, monthly: 3000 });
+      for (const typo of ["-1", "1e3", "ten", "12.5", " "]) {
+        vi.stubEnv("AI_GLOBAL_DAILY_LIMIT", typo);
+        expect(aiGlobalLimits().daily, typo).toBe(AI_GLOBAL_DAILY_DEFAULT);
+      }
+      vi.stubEnv("AI_GLOBAL_DAILY_LIMIT", "0");
+      const owner = person();
+      const siteId = seedDraft(owner.uid);
+      expect((await generate(owner, { siteId })).status).toBe(429);
+      expect(provider.generate).not.toHaveBeenCalled();
+    });
   });
 
   it("counts reading the description and building the website against the same daily allowance", async () => {

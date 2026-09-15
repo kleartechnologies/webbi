@@ -3,28 +3,20 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { Button, ErrorText, Field, GoogleG, Icon, Input } from "@/components/ui";
-import {
-  continueWithGoogle,
-  createWithEmail,
-  sendReset,
-  signInWithEmail,
-  type AuthResult,
-  type Handoff,
-} from "@/lib/auth/actions";
+import { continueWithGoogle, createWithEmail, sendReset, signInWithEmail, type AuthResult } from "@/lib/auth/actions";
+import { INVALID_EMAIL_MESSAGE, isPlausibleEmail, normalizeEmail } from "@/lib/auth/email";
 import { authErrorCode, authErrorMessage } from "@/lib/auth/errors";
 import type { AuthMode } from "@/lib/auth/intent";
 
 export type { AuthMode };
 
-interface AuthFormProps<T> {
+interface AuthFormProps {
   mode: AuthMode;
   onModeChange: (mode: AuthMode) => void;
   onSuccess: (result: AuthResult) => void | Promise<void>;
-  /** Carries an anonymous draft across to a pre-existing account. */
-  handoff?: Handoff<T>;
 }
 
-export function AuthForm<T = unknown>({ mode, onModeChange, onSuccess, handoff }: AuthFormProps<T>) {
+export function AuthForm({ mode, onModeChange, onSuccess }: AuthFormProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -52,21 +44,23 @@ export function AuthForm<T = unknown>({ mode, onModeChange, onSuccess, handoff }
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!email.trim()) return setError("Enter your email address.");
+    if (!isPlausibleEmail(email)) return setError(INVALID_EMAIL_MESSAGE);
     if (password.length < 8) return setError("Use a password with at least 8 characters.");
     void run("email", async () => {
       const result =
         mode === "create"
           ? await createWithEmail({ name, email, password })
-          : await signInWithEmail({ email, password }, handoff);
+          : await signInWithEmail({ email, password });
       await onSuccess(result);
     });
   };
 
   const forgot = () => {
     if (!email.trim()) return setError("Enter your email address first, then tap “Forgot password?”.");
+    if (!isPlausibleEmail(email)) return setError(INVALID_EMAIL_MESSAGE);
     void run("reset", async () => {
       await sendReset(email);
-      setNotice(`We emailed a password reset link to ${email.trim()}.`);
+      setNotice(`We emailed a password reset link to ${normalizeEmail(email)}.`);
     });
   };
 
@@ -79,7 +73,7 @@ export function AuthForm<T = unknown>({ mode, onModeChange, onSuccess, handoff }
         block
         loading={busy === "google"}
         disabled={busy !== null}
-        onClick={() => run("google", async () => onSuccess(await continueWithGoogle(handoff)))}
+        onClick={() => run("google", async () => onSuccess(await continueWithGoogle()))}
       >
         {busy === "google" ? null : <GoogleG />}
         Continue with Google
@@ -114,7 +108,7 @@ export function AuthForm<T = unknown>({ mode, onModeChange, onSuccess, handoff }
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            invalid={Boolean(error) && !email.trim()}
+            invalid={Boolean(error) && !isPlausibleEmail(email)}
           />
         </Field>
         <Field

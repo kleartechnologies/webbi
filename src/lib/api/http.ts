@@ -1,7 +1,9 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
+import { EmailUnverifiedError } from "@/lib/auth/publishing";
 import { UnauthorizedError } from "@/lib/auth/verify";
+import { AppCheckError } from "@/lib/security/appCheck";
 import { AiError, AiQuotaError } from "@/lib/ai/errors";
 import { AdminNotConfiguredError } from "@/lib/firebase/admin";
 import { UploadError } from "@/lib/images/storage";
@@ -23,6 +25,8 @@ export type ApiErrorCode =
   | "payments_not_configured"
   | "payment_failed"
   | "admin_not_configured"
+  | "app_check_failed"
+  | "email_unverified"
   | "internal";
 
 export function apiError(status: number, code: ApiErrorCode, message: string, extra?: Record<string, unknown>) {
@@ -32,11 +36,15 @@ export function apiError(status: number, code: ApiErrorCode, message: string, ex
 /** Maps thrown errors to a consistent JSON error body. */
 export function handleApiError(error: unknown) {
   if (error instanceof UnauthorizedError) return apiError(401, "unauthenticated", error.message);
+  if (error instanceof AppCheckError) return apiError(401, "app_check_failed", error.message);
+  if (error instanceof EmailUnverifiedError) return apiError(403, "email_unverified", error.message);
   if (error instanceof ZodError) {
     return apiError(400, "bad_request", "Some of the details sent were invalid. Go back and check them.");
   }
   if (error instanceof AiQuotaError) {
     if (error.reason === "busy") return apiError(409, "conflict", error.message, { reason: error.reason });
+    // Webbi-wide budget: the reason stays in the server log (guard.ts).
+    if (error.reason === "global_limit") return apiError(429, "rate_limited", error.message);
     return apiError(429, "rate_limited", error.message, { reason: error.reason });
   }
   if (error instanceof AiError) {

@@ -1,5 +1,7 @@
 "use client";
 
+import type { User } from "firebase/auth";
+import { appCheckHeaders } from "@/lib/firebase/appCheck";
 import { getClientAuth } from "@/lib/firebase/client";
 
 export class ApiError extends Error {
@@ -15,16 +17,28 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * The user's ID token, refreshed when it is behind the account: Firebase
+ * reloads the user when a page opens (so `emailVerified` turns true right
+ * after the link is clicked) but keeps the cached token, whose
+ * `email_verified` claim is what the server checks before publishing.
+ */
+async function freshIdToken(user: User): Promise<string> {
+  if (!user.emailVerified) return user.getIdToken();
+  const result = await user.getIdTokenResult();
+  return result.claims.email_verified === true ? result.token : user.getIdToken(true);
+}
+
 /** POST JSON to a Webbi API route with the current Firebase user's ID token. */
 export async function callApi<T>(path: string, body: unknown): Promise<T> {
   const user = getClientAuth().currentUser;
   if (!user) throw new ApiError("unauthenticated", "Sign in to continue.", 401);
-  const token = await user.getIdToken();
+  const [token, appCheck] = await Promise.all([freshIdToken(user), appCheckHeaders()]);
   let response: Response;
   try {
     response = await fetch(path, {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}`, ...appCheck },
       body: JSON.stringify(body),
     });
   } catch {

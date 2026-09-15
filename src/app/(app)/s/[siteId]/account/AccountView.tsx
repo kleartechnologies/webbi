@@ -39,7 +39,7 @@ export function AccountView({ siteId }: { siteId: string }) {
     : null;
 
   return (
-    <RequireAuth allow={["anonymous", "account"]}>
+    <RequireAuth>
       <AppPage className="pb-safe">
         <div className="flex items-center px-3 pt-1">
           <button
@@ -90,10 +90,10 @@ export function AccountView({ siteId }: { siteId: string }) {
           <AuthForm
             mode={mode}
             onModeChange={setMode}
-            onSuccess={(result) => {
+            onSuccess={() => {
               // A guest's draft is no longer copied into an existing account: websites
               // are started only through the server, one unpublished at a time.
-              router.replace(result.switched ? "/dashboard" : `/s/${siteId}/publish`);
+              router.replace(`/s/${siteId}/publish`);
             }}
           />
         </div>

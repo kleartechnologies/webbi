@@ -166,6 +166,30 @@ describe("content security policy", () => {
     }
   });
 
+  it("allows reCAPTCHA Enterprise and App Check only when App Check is configured, by path and never by wildcard", () => {
+    const off = appCspDirectives(PROD);
+    expect(Object.values(off).flat().join(" ")).not.toMatch(/recaptcha|firebaseappcheck|gstatic/);
+    const on = appCspDirectives({ ...PROD, appCheck: true });
+    expect(on["script-src"]).toEqual([
+      "'self'",
+      "'unsafe-inline'",
+      "https://apis.google.com",
+      "https://www.google.com/recaptcha/",
+      "https://www.gstatic.com/recaptcha/",
+    ]);
+    expect(on["connect-src"]).toContain("https://content-firebaseappcheck.googleapis.com");
+    expect(on["frame-src"]).toEqual([
+      "https://webbi-85f26.firebaseapp.com",
+      "https://www.google.com",
+      "https://recaptcha.google.com/recaptcha/",
+    ]);
+    for (const source of Object.values(on).flat()) expect(source).not.toMatch(/\*/);
+    // Customer sites never load App Check or reCAPTCHA.
+    expect(Object.values(siteCspDirectives({ ...PROD, appCheck: true })).flat().join(" ")).not.toMatch(/recaptcha|appcheck|gstatic/);
+    const config = readFileSync(path.join(root, "next.config.ts"), "utf8");
+    expect(config).toMatch(/appCheck:\s*Boolean\(process\.env\.NEXT_PUBLIC_FIREBASE_APPCHECK_SITE_KEY\)/);
+  });
+
   it("adds only local development allowances under next dev", () => {
     const dev = appCspDirectives({ ...PROD, dev: true });
     expect(dev["script-src"]).toContain("'unsafe-eval'");

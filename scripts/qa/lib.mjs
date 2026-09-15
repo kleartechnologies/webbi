@@ -108,8 +108,12 @@ export const profilePhotoInput = (page) => imageInput(page, "profile-photo");
  * account-first, so every QA run that enters /start has to sign up the way a
  * new visitor does: /signin?mode=create&next=/start → the form → /start.
  * Returns the credentials so a later step can sign back in as the same person.
+ *
+ * Publishing needs a verified email, so by default the new account is verified
+ * through the Auth emulator (see verifyEmail). Pass `verify: false` to stay
+ * unverified, e.g. to check the "Please verify your email" prompt.
  */
-export async function signUp(page, base, { name = "QA Tester", email, password = "password123" } = {}) {
+export async function signUp(page, base, { name = "QA Tester", email, password = "password123", verify = true } = {}) {
   const address = email || `qa-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}@example.com`;
   await page.goto(`${base}/signin?mode=create&next=%2Fstart`, { waitUntil: "load" });
   await page.waitForSelector("#auth-name", { timeout: 20000 });
@@ -119,5 +123,44 @@ export async function signUp(page, base, { name = "QA Tester", email, password =
   await page.click("button[type=submit]");
   await page.waitForFunction(() => location.pathname === "/start", { timeout: 30000 });
   await page.waitForSelector("textarea", { timeout: 20000 });
+  if (verify) {
+    await verifyEmail(page, base, address);
+    await page.goto(`${base}/start`, { waitUntil: "load" });
+    await page.waitForSelector("textarea", { timeout: 20000 });
+  }
   return { name, email: address, password };
+}
+
+/**
+ * Clicks the account's verification link the way its owner would, using the
+ * Auth emulator's record of sent emails (FIREBASE_AUTH_EMULATOR_HOST, default
+ * 127.0.0.1:9099; QA_PROJECT, default webbi-85f26), then presses "I've verified"
+ * on the dashboard so the browser's ID token carries email_verified. Only works
+ * against the emulators: a real project's emails can't be read.
+ */
+export async function verifyEmail(page, base, email) {
+  const host = process.env.FIREBASE_AUTH_EMULATOR_HOST || "127.0.0.1:9099";
+  const project = process.env.QA_PROJECT || "webbi-85f26";
+  let link;
+  for (let attempt = 0; attempt < 20 && !link; attempt++) {
+    const res = await fetch(`http://${host}/emulator/v1/projects/${project}/oobCodes`);
+    if (!res.ok) throw new Error(`Auth emulator oobCodes: ${res.status} (verifyEmail only works against the emulators)`);
+    const { oobCodes = [] } = await res.json();
+    link = oobCodes.filter((code) => code.email === email && code.requestType === "VERIFY_EMAIL").pop()?.oobLink;
+    if (!link) await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  if (!link) throw new Error(`no verification email was sent to ${email}`);
+  const applied = await fetch(link);
+  if (!applied.ok) throw new Error(`applying the verification link: ${applied.status}`);
+
+  // Firebase reloads the user when a page opens, so the banner may already be
+  // gone; press "I've verified" only if it's still showing. Either way the API
+  // client refreshes a token that is behind the account before publishing.
+  await page.goto(`${base}/dashboard`, { waitUntil: "load" });
+  await page.waitForSelector("main h1, main h2", { timeout: 20000 });
+  const button = await page
+    .waitForSelector('[data-email-verification="banner"] button', { visible: true, timeout: 4000 })
+    .catch(() => null);
+  if (button) await button.click();
+  await page.waitForFunction(() => !document.querySelector("[data-email-verification]"), { timeout: 20000 });
 }

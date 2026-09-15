@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api/client";
+import { appCheckHeaders } from "@/lib/firebase/appCheck";
 import { getClientAuth } from "@/lib/firebase/client";
 import type { SiteImage } from "@/lib/site/schema";
 import { isUploadType, MAX_UPLOAD_BYTES, TOO_LARGE_MESSAGE, UNSUPPORTED_MESSAGE } from "./limits";
@@ -23,7 +24,7 @@ export async function uploadSiteImage(
   if (optimized.blob.size > MAX_UPLOAD_BYTES) throw new Error(TOO_LARGE_MESSAGE);
   const user = getClientAuth().currentUser;
   if (!user) throw new ApiError("unauthenticated", "Sign in to continue.", 401);
-  const token = await user.getIdToken();
+  const [token, appCheck] = await Promise.all([user.getIdToken(), appCheckHeaders()]);
 
   // XMLHttpRequest rather than fetch: it reports upload progress for the progress bar.
   return new Promise<SiteImage>((resolve, reject) => {
@@ -31,6 +32,7 @@ export async function uploadSiteImage(
     xhr.open("POST", `/api/sites/images?siteId=${encodeURIComponent(siteId)}`);
     xhr.setRequestHeader("authorization", `Bearer ${token}`);
     xhr.setRequestHeader("content-type", optimized.contentType);
+    for (const [name, value] of Object.entries(appCheck)) xhr.setRequestHeader(name, value);
     xhr.upload.onprogress = (event) => onProgress?.(event.lengthComputable && event.total ? event.loaded / event.total : 0);
     xhr.onerror = () => reject(new ApiError("network", "No connection. Check your internet and try again.", 0));
     xhr.onload = () => {

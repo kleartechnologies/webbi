@@ -7,6 +7,7 @@ import { POST as callback } from "@/app/api/payments/webhook/route";
 import { POST as checkout } from "@/app/api/publish/checkout/route";
 import { POST as removeRoute } from "@/app/api/sites/delete/route";
 import { POST as createRoute } from "@/app/api/sites/route";
+import { publishStanding } from "@/lib/auth/accounts";
 import { requireUser, UnauthorizedError, type VerifiedUser } from "@/lib/auth/verify";
 import { DEMO_SITES } from "@/lib/site/demo";
 import { DAILY_DRAFT_LIMIT, quotaDay } from "@/lib/site/drafts";
@@ -32,6 +33,8 @@ vi.mock("@/lib/auth/verify", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/verify")>()),
   requireUser: vi.fn(),
 }));
+// Firebase Auth's own record of the payer, read when a payment is fulfilled. Verified unless a test says otherwise.
+vi.mock("@/lib/auth/accounts", () => ({ publishStanding: vi.fn() }));
 
 const SECRET = "secret-key-for-unit-tests-only";
 const SIGNING_KEY = "x-signature-key-for-unit-tests-only";
@@ -62,7 +65,7 @@ let people = 0;
 
 function person(overrides: Partial<VerifiedUser> = {}): VerifiedUser {
   people += 1;
-  return { uid: `owner-${people}`, isAnonymous: false, email: `owner${people}@example.com`, name: "Aisyah", ...overrides };
+  return { uid: `owner-${people}`, isAnonymous: false, email: `owner${people}@example.com`, name: "Aisyah", emailVerified: true, providers: ["password"], ...overrides };
 }
 
 const site = (id: string): Doc | undefined => db.read(`sites/${id}`);
@@ -212,6 +215,7 @@ function legacyDraft(siteId: string, ownerUid: string, createdAt: string, overri
 }
 
 beforeEach(() => {
+  vi.mocked(publishStanding).mockResolvedValue("allowed");
   vi.stubEnv("PAYMENT_PROVIDER", "");
   vi.stubEnv("NODE_ENV", "production");
   vi.stubEnv("BILLPLZ_BASE_URL", "https://www.billplz.com/api/");

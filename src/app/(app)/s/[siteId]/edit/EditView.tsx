@@ -26,7 +26,7 @@ import { useDraft, type SaveState } from "./useDraft";
 export function EditView({ siteId }: { siteId: string }) {
   const site = useSite(siteId);
   return (
-    <RequireAuth allow={["anonymous", "account"]}>
+    <RequireAuth>
       <AppPage>
         {site === undefined ? (
           <Loading />

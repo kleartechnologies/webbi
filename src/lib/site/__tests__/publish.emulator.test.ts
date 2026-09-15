@@ -27,6 +27,8 @@ vi.hoisted(() => {
   process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID = "demo-webbi";
 });
 vi.mock("next/cache", () => ({ revalidateTag: vi.fn() }));
+// The payer's Firebase Auth record (email verified) is covered in billplz-flow.test.ts; here every owner may publish.
+vi.mock("@/lib/auth/accounts", () => ({ publishStanding: vi.fn(async () => "allowed") }));
 
 const HOST = process.env.FIRESTORE_EMULATOR_HOST;
 const PROJECT = "demo-webbi";

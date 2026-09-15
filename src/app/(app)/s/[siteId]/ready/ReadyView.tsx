@@ -20,7 +20,7 @@ import { useSite } from "@/lib/site/useSite";
 export function ReadyView({ siteId }: { siteId: string }) {
   const site = useSite(siteId);
   return (
-    <RequireAuth allow={["anonymous", "account"]}>
+    <RequireAuth>
       <AppPage>
         {site === undefined ? (
           <div className="flex flex-1 items-center justify-center py-24 text-navy">

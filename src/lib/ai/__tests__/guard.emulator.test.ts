@@ -137,6 +137,20 @@ describe.runIf(Boolean(HOST))("Phase B on the Firestore emulator", () => {
 
       expect((await admin.doc("siteAi/alice-site").get()).data()).toMatchObject({ generations: 1, understandings: 1, lock: null });
     });
+
+    it("keeps the Webbi-wide AI budget out of reach of every browser", async () => {
+      await admin.doc("aiBudget/day-2026-09-15").set({ period: "2026-09-15", count: 7 });
+      const alice = browser("alice");
+      const ref = doc(alice, "aiBudget", "day-2026-09-15");
+      await denied(getDoc(ref));
+      await denied(setDoc(ref, { period: "2026-09-15", count: 0 }));
+      await denied(updateDoc(ref, { count: 0 }));
+      await denied(deleteDoc(ref));
+      await denied(setDoc(doc(alice, "aiBudget", "month-2026-09"), { period: "2026-09", count: 0 }));
+      await denied(getDoc(doc(browser("guest-2", true), "aiBudget", "day-2026-09-15")));
+
+      expect((await admin.doc("aiBudget/day-2026-09-15").get()).data()).toMatchObject({ count: 7 });
+    });
   });
 
   describe("POST /api/ai/generate with real transactions", () => {

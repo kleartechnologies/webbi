@@ -1,16 +1,17 @@
 /**
  * Auth actions (browser only). Webbi is account-first: a visitor creates their
  * account (Google or email) before they start building, so every draft has a
- * real owner. The anonymous branches below are the legacy path — drafts started
- * before that change still link their anonymous user into an account here.
+ * real owner. There are no guest (anonymous) sessions; the Anonymous provider
+ * is switched off in the Firebase Console.
+ *
+ * Email/password accounts are sent Firebase's verification link when they sign
+ * up. They can build and preview straight away; publishing waits for the
+ * address to be verified (src/lib/auth/publishing.ts, enforced on the server).
  */
 import {
-  EmailAuthProvider,
   GoogleAuthProvider,
-  linkWithCredential,
-  linkWithPopup,
+  sendEmailVerification,
   sendPasswordResetEmail,
-  signInWithCredential,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -19,50 +20,20 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { getClientAuth, getClientDb } from "@/lib/firebase/client";
+import { normalizeEmail } from "./email";
 import { authErrorCode } from "./errors";
-
-/**
- * When an anonymous visitor signs in to an account that already exists, the
- * anonymous user (and everything it owns) becomes unreachable. A handoff
- * captures what matters before the switch and restores it for the new uid.
- */
-export interface Handoff<T> {
-  capture: () => Promise<T>;
-  restore: (captured: T, uid: string) => Promise<void>;
-}
+import { GOOGLE_PROVIDER } from "./publishing";
 
 export interface AuthResult {
   user: User;
-  /** True when we signed in to a different, pre-existing account. */
-  switched: boolean;
 }
 
-export async function continueWithGoogle<T>(handoff?: Handoff<T>): Promise<AuthResult> {
-  const auth = getClientAuth();
+export async function continueWithGoogle(): Promise<AuthResult> {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
-  const current = auth.currentUser;
-
-  if (current?.isAnonymous) {
-    try {
-      const linked = await linkWithPopup(current, provider);
-      await upsertUserDoc(linked.user);
-      return { user: linked.user, switched: false };
-    } catch (error) {
-      if (authErrorCode(error) !== "auth/credential-already-in-use") throw error;
-      const credential = GoogleAuthProvider.credentialFromError(error as never);
-      if (!credential) throw error;
-      const captured = handoff ? await handoff.capture() : undefined;
-      const signedIn = await signInWithCredential(auth, credential);
-      if (handoff) await handoff.restore(captured as T, signedIn.user.uid);
-      await upsertUserDoc(signedIn.user);
-      return { user: signedIn.user, switched: true };
-    }
-  }
-
-  const result = await signInWithPopup(auth, provider);
+  const result = await signInWithPopup(getClientAuth(), provider);
   await upsertUserDoc(result.user);
-  return { user: result.user, switched: false };
+  return { user: result.user };
 }
 
 export async function createWithEmail(input: {
@@ -71,41 +42,66 @@ export async function createWithEmail(input: {
   password: string;
 }): Promise<AuthResult> {
   const auth = getClientAuth();
-  const credential = EmailAuthProvider.credential(input.email.trim(), input.password);
-  const current = auth.currentUser;
-  let user: User;
-  if (current?.isAnonymous) {
-    user = (await linkWithCredential(current, credential)).user;
-  } else {
-    // No anonymous session (e.g. arrived at /signin directly).
-    const { createUserWithEmailAndPassword } = await import("firebase/auth");
-    user = (await createUserWithEmailAndPassword(auth, input.email.trim(), input.password)).user;
-  }
+  const { createUserWithEmailAndPassword } = await import("firebase/auth");
+  const user = (await createUserWithEmailAndPassword(auth, normalizeEmail(input.email), input.password)).user;
   const name = input.name.trim();
   if (name) await updateProfile(user, { displayName: name });
+  // Best-effort: the account exists either way, and the Publish screen can resend.
+  await sendVerification(user).catch((error) => console.warn("verification email not sent", authErrorCode(error)));
   await upsertUserDoc(user);
-  return { user, switched: false };
+  return { user };
 }
 
-export async function signInWithEmail<T>(
-  input: { email: string; password: string },
-  handoff?: Handoff<T>,
-): Promise<AuthResult> {
-  const auth = getClientAuth();
-  const wasAnonymous = Boolean(auth.currentUser?.isAnonymous);
-  const captured = wasAnonymous && handoff ? await handoff.capture() : undefined;
-  const result = await signInWithEmailAndPassword(auth, input.email.trim(), input.password);
-  if (wasAnonymous && handoff) await handoff.restore(captured as T, result.user.uid);
+export async function signInWithEmail(input: { email: string; password: string }): Promise<AuthResult> {
+  const result = await signInWithEmailAndPassword(getClientAuth(), normalizeEmail(input.email), input.password);
   await upsertUserDoc(result.user);
-  return { user: result.user, switched: wasAnonymous };
+  return { user: result.user };
 }
 
 export async function sendReset(email: string): Promise<void> {
-  await sendPasswordResetEmail(getClientAuth(), email.trim());
+  await sendPasswordResetEmail(getClientAuth(), normalizeEmail(email));
 }
 
 export async function signOutUser(): Promise<void> {
   await signOut(getClientAuth());
+}
+
+/** True for an email/password account whose address isn't verified yet. Google accounts never need it. */
+export function needsEmailVerification(user: User | null | undefined): boolean {
+  if (!user || user.isAnonymous || user.emailVerified) return false;
+  return !user.providerData.some((profile) => profile.providerId === GOOGLE_PROVIDER);
+}
+
+/** Sends the verification link again. Firebase rate-limits this too (auth/too-many-requests). */
+export async function resendVerification(): Promise<void> {
+  const user = getClientAuth().currentUser;
+  if (!user) throw new Error("Sign in to continue.");
+  await sendVerification(user);
+}
+
+/**
+ * After the owner clicks the link (often in another tab or app): reloads the
+ * account and forces a new ID token, so both this page and the server see
+ * email_verified. Returns whether the address is now verified.
+ */
+export async function refreshVerification(): Promise<boolean> {
+  const user = getClientAuth().currentUser;
+  if (!user) return false;
+  await user.reload();
+  // A fresh token carries email_verified; onIdTokenChanged then re-renders the app.
+  await user.getIdToken(true);
+  return getClientAuth().currentUser?.emailVerified === true;
+}
+
+async function sendVerification(user: User): Promise<void> {
+  try {
+    // The link comes back to the dashboard, where the owner carries on.
+    await sendEmailVerification(user, { url: `${window.location.origin}/dashboard` });
+  } catch (error) {
+    // This address isn't an authorized domain (a preview deploy): Firebase's own page instead.
+    if (authErrorCode(error) !== "auth/unauthorized-continue-uri") throw error;
+    await sendEmailVerification(user);
+  }
 }
 
 /** users/{uid} — profile mirror used by the dashboard greeting. */

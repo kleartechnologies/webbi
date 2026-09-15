@@ -5,6 +5,7 @@ import { POST as callback } from "@/app/api/payments/webhook/route";
 import { POST as checkout } from "@/app/api/publish/checkout/route";
 import { POST as confirm } from "@/app/api/publish/confirm/route";
 import { POST as republish } from "@/app/api/publish/republish/route";
+import { publishStanding } from "@/lib/auth/accounts";
 import { requireUser, type VerifiedUser } from "@/lib/auth/verify";
 import { DEMO_SITES } from "@/lib/site/demo";
 import { deleteDraftSite } from "@/lib/site/drafts";
@@ -29,6 +30,8 @@ vi.mock("@/lib/auth/verify", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/verify")>()),
   requireUser: vi.fn(),
 }));
+// Firebase Auth's own record of the payer, read when a payment is fulfilled. Verified unless a test says otherwise.
+vi.mock("@/lib/auth/accounts", () => ({ publishStanding: vi.fn() }));
 
 const SECRET = "secret-key-for-unit-tests-only";
 const SIGNING_KEY = "x-signature-key-for-unit-tests-only";
@@ -46,7 +49,7 @@ let people = 0;
 /** A signed-in account. Every test gets fresh ones, so the per-user rate limits never carry over. */
 function person(overrides: Partial<VerifiedUser> = {}): VerifiedUser {
   people += 1;
-  return { uid: `owner-${people}`, isAnonymous: false, email: `owner${people}@example.com`, name: "Aisyah", ...overrides };
+  return { uid: `owner-${people}`, isAnonymous: false, email: `owner${people}@example.com`, name: "Aisyah", emailVerified: true, providers: ["password"], ...overrides };
 }
 
 function seedSite(siteId: string, ownerUid: string, overrides: Doc = {}): void {
@@ -197,6 +200,7 @@ async function openBill(user: VerifiedUser, siteId: string, slug: string) {
 }
 
 beforeEach(() => {
+  vi.mocked(publishStanding).mockResolvedValue("allowed");
   // As on Netlify: PAYMENT_PROVIDER unset, so Billplz is chosen because its three keys are present.
   vi.stubEnv("PAYMENT_PROVIDER", "");
   vi.stubEnv("NODE_ENV", "production");
@@ -581,6 +585,114 @@ describe("publishing gate", () => {
       body: { status: "published", slug: "kedai-aisyah-a" },
     });
     expect((await send(person(), republish, "/api/publish/republish", { siteId: "site-a" })).status).toBe(404);
+  });
+});
+
+describe("email verification: only a verified account's website goes live", () => {
+  const VERIFY = "Please verify your email before publishing your website.";
+  const POSTS = () => billplz.requests.filter((request) => request.method === "POST").length;
+  const checkoutAs = (user: VerifiedUser, siteId = "site-a", slug = "kedai-aisyah-a") =>
+    send(user, checkout, "/api/publish/checkout", { siteId, slug });
+
+  it("refuses checkout for an unverified email account without opening a bill, and lets Google accounts through", async () => {
+    const unverified = person({ emailVerified: false, providers: ["password"] });
+    seedSite("site-a", unverified.uid);
+    const res = await checkoutAs(unverified);
+    expect(res).toEqual({ status: 403, body: { error: { code: "email_unverified", message: VERIFY } } });
+    expect(POSTS()).toBe(0);
+    expect(db.ids("payments")).toEqual([]);
+
+    const noClaim = person({ emailVerified: undefined, providers: undefined });
+    seedSite("site-n", noClaim.uid);
+    expect((await checkoutAs(noClaim, "site-n", "kedai-n")).status).toBe(403);
+
+    const google = person({ emailVerified: false, providers: ["google.com"] });
+    seedSite("site-g", google.uid);
+    expect((await checkoutAs(google, "site-g", "kedai-google")).status).toBe(200);
+    expect(POSTS()).toBe(1);
+  });
+
+  it("keeps a payment from an owner Firebase Auth says is unverified: paid, not failed, not live, and publishes it on Pay once verified", async () => {
+    const owner = person();
+    seedSite("site-a", owner.uid);
+    const a = await openBill(owner, "site-a", "kedai-aisyah-a");
+    vi.mocked(publishStanding).mockResolvedValue("unverified");
+    billplz.pay(a.billId);
+
+    const callbackRes = await postCallback(callbackBody(a.bill));
+    expect(callbackRes.status).toBe(200);
+    expect(callbackRes.body).toMatchObject({ published: false, needsAttention: true });
+    expect(payment(a.paymentId)).toMatchObject({ status: "paid", needsAttention: true, attentionReason: "email_unverified" });
+    expect(site("site-a")).toMatchObject({ status: "draft", paid: false, published: null });
+    expect(db.ids("publicSites")).toEqual([]);
+    expect(publishStanding).toHaveBeenCalledWith(owner.uid);
+
+    // The return page says it was paid and asks for verification, rather than "failed".
+    const confirmed = await confirmAs(owner, { siteId: "site-a", sessionId: a.billId, redirectQuery: returnQuery(a.bill).toString() });
+    expect(confirmed).toEqual({ status: 403, body: { error: { code: "email_unverified", message: attentionMessage("email_unverified"), paid: true } } });
+
+    // Retrying and pressing Pay again change nothing while Auth still says unverified, and never open a second bill.
+    expect(await retryPaymentFulfilment(a.paymentId)).toMatchObject({ published: false, needsAttention: "email_unverified" });
+    expect(await checkoutAs(owner)).toEqual({ status: 403, body: { error: { code: "email_unverified", message: attentionMessage("email_unverified"), paid: true } } });
+    expect(POSTS()).toBe(1);
+    expect(payment(a.paymentId)).toMatchObject({ status: "paid", needsAttention: true });
+    expect(db.ids("publicSites")).toEqual([]);
+
+    vi.mocked(publishStanding).mockResolvedValue("allowed");
+    expect(await checkoutAs(owner)).toEqual({ status: 200, body: { url: "/s/site-a/live" } });
+    expect(POSTS()).toBe(1);
+    expect(db.ids("payments")).toEqual([a.paymentId]);
+    expect(site("site-a")).toMatchObject({ status: "published", paid: true, slug: "kedai-aisyah-a", paymentId: a.paymentId });
+    expect(payment(a.paymentId)).toMatchObject({ status: "paid", needsAttention: false, attentionReason: null });
+  });
+
+  it("publishes a held payment on a repeated callback or a retry once the owner has verified", async () => {
+    const owner = person();
+    seedSite("site-a", owner.uid);
+    const a = await openBill(owner, "site-a", "kedai-aisyah-a");
+    vi.mocked(publishStanding).mockResolvedValue("unverified");
+    billplz.pay(a.billId);
+    await postCallback(callbackBody(a.bill));
+    expect(db.ids("publicSites")).toEqual([]);
+
+    vi.mocked(publishStanding).mockResolvedValue("allowed");
+    expect(await retryPaymentFulfilment(a.paymentId)).toMatchObject({ published: true, slug: "kedai-aisyah-a" });
+    expect(site("site-a")).toMatchObject({ status: "published", paid: true });
+    expect(db.ids("publicSites")).toEqual(["kedai-aisyah-a"]);
+    expect((await postCallback(callbackBody(a.bill))).status).toBe(200);
+    expect(db.ids("publicSites")).toEqual(["kedai-aisyah-a"]);
+  });
+
+  it("treats Firebase Auth being unreachable as transient: held for a retry, never published, never failed", async () => {
+    const owner = person();
+    seedSite("site-a", owner.uid);
+    const a = await openBill(owner, "site-a", "kedai-aisyah-a");
+    vi.mocked(publishStanding).mockResolvedValue("unavailable");
+    billplz.pay(a.billId);
+
+    expect((await postCallback(callbackBody(a.bill))).status).toBe(500);
+    expect(payment(a.paymentId)).toMatchObject({ status: "paid", needsAttention: true, attentionReason: "fulfilment_error" });
+    expect(site("site-a")).toMatchObject({ status: "draft", paid: false });
+    expect(db.ids("publicSites")).toEqual([]);
+
+    vi.mocked(publishStanding).mockResolvedValue("allowed");
+    expect((await postCallback(callbackBody(a.bill))).status).toBe(200);
+    expect(site("site-a")).toMatchObject({ status: "published", paid: true, slug: "kedai-aisyah-a" });
+  });
+
+  it("won't push edits to a live website from a token that isn't verified", async () => {
+    const owner = person();
+    seedSite("site-a", owner.uid);
+    const a = await openBill(owner, "site-a", "kedai-aisyah-a");
+    billplz.pay(a.billId);
+    await postCallback(callbackBody(a.bill));
+
+    const unverified = { ...owner, emailVerified: false, providers: ["password"] };
+    expect(await send(unverified, republish, "/api/publish/republish", { siteId: "site-a" })).toEqual({
+      status: 403,
+      body: { error: { code: "email_unverified", message: VERIFY } },
+    });
+    expect((await send(owner, republish, "/api/publish/republish", { siteId: "site-a" })).status).toBe(200);
   });
 });
 

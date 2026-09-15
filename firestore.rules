@@ -20,6 +20,7 @@ rules_version = '2';
 //                         only by the server; a suspended site's draft can't be
 //                         edited from a browser either.
 //   siteModeration/{id} – server only: why a website was suspended.
+//   aiBudget/{period}   – server only: Webbi-wide AI requests this day/month.
 //   publicSites/{slug}  – the published copy of a site (or, while its website is
 //                         suspended, a marker with no content). Anyone can get
 //                         one by its link; nobody can list them. Server written.
@@ -75,6 +76,11 @@ service cloud.firestore {
 
     // AI counts and locks: only the AI routes (Admin SDK) touch these.
     match /siteAi/{siteId} {
+      allow read, write: if false;
+    }
+
+    // Webbi-wide AI budget: only the AI routes (Admin SDK) touch these.
+    match /aiBudget/{period} {
       allow read, write: if false;
     }
 

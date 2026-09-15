@@ -6,7 +6,8 @@ import { AppPage } from "@/components/app/AppHeader";
 import { CenteredWordmark } from "@/components/app/FlowChrome";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { Button, ButtonLink, Icon, Spinner } from "@/components/ui";
-import { callApi, errorMessage } from "@/lib/api/client";
+import { EmailVerificationNotice } from "@/components/app/EmailVerificationNotice";
+import { ApiError, callApi, errorMessage } from "@/lib/api/client";
 import { useSite } from "@/lib/site/useSite";
 
 type ConfirmResponse =
@@ -19,6 +20,8 @@ type State =
   | { kind: "slow" }
   | { kind: "paid" }
   | { kind: "failed" }
+  /** Paid, but the account's email isn't verified yet: the payment is kept and publishes after verification. */
+  | { kind: "unverified" }
   | { kind: "error"; message: string };
 
 const POLL_MS = 3000;
@@ -85,7 +88,9 @@ function Confirm({ siteId }: { siteId: string }) {
           setState({ kind: "failed" });
         }
       } catch (error) {
-        if (!cancelled) setState({ kind: "error", message: errorMessage(error) });
+        if (cancelled) return;
+        if (error instanceof ApiError && error.code === "email_unverified") setState({ kind: "unverified" });
+        else setState({ kind: "error", message: errorMessage(error) });
       }
     })();
     return () => {
@@ -137,6 +142,22 @@ function Confirm({ siteId }: { siteId: string }) {
           Go to My Webbi
         </ButtonLink>
       </Message>
+    );
+  }
+
+  if (shown.kind === "unverified") {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 py-24 text-center">
+        <h1 className="text-[24px] leading-[1.15] tracking-[-0.02em]">Payment received</h1>
+        <div className="w-full max-w-[360px] text-left">
+          <EmailVerificationNotice variant="paid" onVerified={() => router.replace(`/s/${siteId}/publish`)} />
+        </div>
+        <div className="flex w-full max-w-[320px] flex-col gap-2">
+          <ButtonLink href={`/s/${siteId}/publish`} block>
+            Back to publish
+          </ButtonLink>
+        </div>
+      </div>
     );
   }
 

@@ -65,7 +65,7 @@ const SOCIAL_HINT = "Paste your profile link or @username.";
 export function ConfirmView({ siteId }: { siteId: string }) {
   const site = useSite(siteId);
   return (
-    <RequireAuth allow={["anonymous", "account"]}>
+    <RequireAuth>
       <AppPage>
         {site === undefined ? (
           <div className="flex flex-1 items-center justify-center py-24 text-navy">

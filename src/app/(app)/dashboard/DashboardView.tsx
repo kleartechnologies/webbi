@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppHeader, AppPage } from "@/components/app/AppHeader";
+import { EmailVerificationNotice } from "@/components/app/EmailVerificationNotice";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { SiteCard } from "@/components/app/SiteCard";
 import { Icon, Spinner } from "@/components/ui";
@@ -59,11 +60,11 @@ function SitesList({ uid }: { uid: string }) {
 }
 
 export function DashboardView() {
-  const { user, status } = useAuth();
+  const { user } = useAuth();
   const name = firstName(user?.displayName);
 
   return (
-    <RequireAuth allow={["account", "anonymous"]}>
+    <RequireAuth>
       <AppPage>
         <AppHeader />
         <div className="flex flex-col gap-[18px] px-5 pt-[22px]">
@@ -74,15 +75,7 @@ export function DashboardView() {
             </h1>
             <p className="text-[14px] text-muted">Here&apos;s your Webbi.</p>
           </div>
-          {status === "anonymous" ? (
-            <div className="flex items-start gap-3 rounded-input border border-line bg-surface p-4">
-              <Icon name="info" size={22} fill className="mt-0.5 flex-none text-navy" />
-              <p className="text-[13px] leading-[1.5] text-ink">
-                You&apos;re building as a guest. Create an account when you publish so you can come back to
-                this Webbi from any phone.
-              </p>
-            </div>
-          ) : null}
+          <EmailVerificationNotice variant="banner" />
           {user ? <SitesList uid={user.uid} /> : null}
         </div>
         <div className="mt-auto flex justify-center px-5 pb-safe pt-8">

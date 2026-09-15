@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { AppPage } from "@/components/app/AppHeader";
 import { FooterNote, StickyFooter } from "@/components/app/FlowChrome";
+import { EmailVerificationNotice } from "@/components/app/EmailVerificationNotice";
 import { RequireAuth } from "@/components/app/RequireAuth";
 import { SiteMissing } from "@/components/app/SiteMissing";
 import { Button, Field, Icon, Input, Spinner, type IconName } from "@/components/ui";
@@ -21,7 +22,7 @@ import { useSite } from "@/lib/site/useSite";
 export function PublishView({ siteId }: { siteId: string }) {
   const site = useSite(siteId);
   return (
-    <RequireAuth allow={["anonymous", "account"]}>
+    <RequireAuth>
       <AppPage>
         {site === undefined ? (
           <div className="flex flex-1 items-center justify-center py-24 text-navy">
@@ -70,7 +71,7 @@ function typedSlug(value: string): string {
 function Publish({ site }: { site: Site }) {
   const router = useRouter();
   const params = useSearchParams();
-  const { status } = useAuth();
+  const { status, needsVerification } = useAuth();
   const draft = site.draft;
   const cancelled = params.get("cancelled") === "1";
 
@@ -78,13 +79,14 @@ function Publish({ site }: { site: Site }) {
   const [remote, setRemote] = useState<RemoteCheck | null>(null);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+  /** Checkout said email_unverified for a payment that is already in (held until the owner verifies). */
+  const [unverifiedByServer, setUnverifiedByServer] = useState(false);
 
-  // Guests must own an account before paying; a live site goes to its Live screen.
+  // A live site goes to its Live screen.
   useEffect(() => {
-    if (status === "anonymous") router.replace(`/s/${site.id}/account`);
-    else if (site.status === "published") router.replace(`/s/${site.id}/live`);
+    if (site.status === "published") router.replace(`/s/${site.id}/live`);
     else if (!draft) router.replace(`/s/${site.id}/confirm`);
-  }, [status, site.id, site.status, draft, router]);
+  }, [site.id, site.status, draft, router]);
 
   // What we can tell without asking the server. A slug that is merely
   // unfinished (too short, or ending in the dash being typed) gets no error.
@@ -143,14 +145,18 @@ function Publish({ site }: { site: Site }) {
   const notConfigured = paymentsConfigured === false || blocked;
 
   const pay = async () => {
-    if (!usable || paying) return;
+    if (!usable || paying || needsVerification) return;
     setPaying(true);
     setPayError(null);
     try {
       const { url } = await callApi<{ url: string }>("/api/publish/checkout", { siteId: site.id, slug });
       window.location.assign(url);
     } catch (error) {
-      setPayError(errorMessage(error));
+      // The server's word on verification wins over this page's (possibly stale) token.
+      // A payment already taken gets the reassuring "paid" notice; otherwise the plain verification message.
+      const heldPayment = error instanceof ApiError && error.code === "email_unverified" && error.details.paid === true;
+      setPayError(heldPayment ? null : errorMessage(error));
+      if (heldPayment) setUnverifiedByServer(true);
       setPaying(false);
     }
   };
@@ -272,6 +278,13 @@ function Publish({ site }: { site: Site }) {
           <span className="text-[12px] text-muted">You choose the method on the secure payment page.</span>
         </div>
 
+        {needsVerification || unverifiedByServer ? (
+          <EmailVerificationNotice
+            variant={unverifiedByServer && !needsVerification ? "paid" : "publish"}
+            onVerified={() => setUnverifiedByServer(false)}
+          />
+        ) : null}
+
         {notConfigured ? (
           <div className="flex flex-col gap-1 rounded-card border border-line bg-surface px-4 py-[14px]" role="status">
             <strong className="text-[14px]">Payments aren&apos;t switched on yet</strong>
@@ -295,7 +308,7 @@ function Publish({ site }: { site: Site }) {
           icon="lock"
           iconPosition="left"
           loading={paying}
-          disabled={!usable || notConfigured}
+          disabled={!usable || notConfigured || needsVerification}
           onClick={() => void pay()}
         >
           Pay {PRICE_LABEL} &amp; publish

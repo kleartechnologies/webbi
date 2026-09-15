@@ -66,6 +66,9 @@ export async function POST(request: Request) {
           return NextResponse.json({ status: "published", slug: result.slug });
         }
         // Paid, but the website isn't live. Never "failed": the payment is kept for a retry.
+        if (result.needsAttention === "email_unverified") {
+          return apiError(403, "email_unverified", attentionMessage(result.needsAttention), { paid: true });
+        }
         return apiError(409, "conflict", attentionMessage(result.needsAttention));
       }
       case "pending":

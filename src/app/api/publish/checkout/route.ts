@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { apiError, assertRateLimit, handleApiError } from "@/lib/api/http";
+import { assertMayPublish } from "@/lib/auth/publishing";
 import { requireUser } from "@/lib/auth/verify";
 import { PRICE_SEN, publicEnv } from "@/lib/env";
 import { getPaymentProvider } from "@/lib/payments";
@@ -33,6 +34,9 @@ function afterPayment(siteId: string, result: FulfilResult) {
   if (result.slug && (!result.needsAttention || result.duplicate)) {
     return NextResponse.json({ url: `/s/${siteId}/live` });
   }
+  if (result.needsAttention === "email_unverified") {
+    return apiError(403, "email_unverified", attentionMessage(result.needsAttention), { paid: true });
+  }
   return apiError(409, "conflict", attentionMessage(result.needsAttention));
 }
 
@@ -54,6 +58,8 @@ export async function POST(request: Request) {
     if (user.isAnonymous) {
       return apiError(403, "forbidden", "Create an account before paying so your website stays yours.");
     }
+    // No bill for an unverified email. Fulfilment checks again with Firebase Auth itself.
+    assertMayPublish(user);
     const { siteId, slug } = bodySchema.parse(await request.json());
     const provider = getPaymentProvider();
 

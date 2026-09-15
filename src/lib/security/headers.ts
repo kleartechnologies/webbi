@@ -41,6 +41,12 @@ export interface SecurityHeaderOptions {
    * It may be the site's own domain (proxied /__/auth/), which a copy on another domain still has to frame.
    */
   authDomain?: string;
+  /**
+   * NEXT_PUBLIC_FIREBASE_APPCHECK_SITE_KEY is set: App Check runs in the browser with
+   * reCAPTCHA Enterprise, which loads Google's script and a hidden iframe and
+   * exchanges its token with App Check. Off, none of those origins are allowed.
+   */
+  appCheck?: boolean;
 }
 
 type Directives = Record<string, string[]>;
@@ -61,6 +67,12 @@ const FIRESTORE = "https://firestore.googleapis.com";
 const GOOGLE_API_LOADER = "https://apis.google.com";
 /** Keyless Google Maps embed on a site's location section (…/maps?output=embed redirects within www.google.com). */
 const GOOGLE_MAPS_EMBED = "https://www.google.com";
+
+/** reCAPTCHA Enterprise for App Check: script, hidden iframe, and the App Check token exchange. Paths, never whole hosts. */
+const RECAPTCHA_SCRIPTS = ["https://www.google.com/recaptcha/", "https://www.gstatic.com/recaptcha/"];
+/** reCAPTCHA's fallback frame host; its main frame is on www.google.com, already allowed for Maps. */
+const RECAPTCHA_FRAME_FALLBACK = "https://recaptcha.google.com/recaptcha/";
+const APP_CHECK_API = "https://content-firebaseappcheck.googleapis.com";
 
 const DEV_ORIGINS = ["http://127.0.0.1:*", "http://localhost:*"];
 
@@ -119,17 +131,18 @@ const LOCKDOWN: Directives = {
 };
 
 export function appCspDirectives(options: SecurityHeaderOptions = {}): Directives {
+  const appCheck = options.appCheck === true;
   return withDev(
     {
       "default-src": [SELF],
-      "script-src": [SELF, UNSAFE_INLINE, GOOGLE_API_LOADER],
+      "script-src": [SELF, UNSAFE_INLINE, GOOGLE_API_LOADER, ...(appCheck ? RECAPTCHA_SCRIPTS : [])],
       "style-src": [SELF, UNSAFE_INLINE],
       "img-src": [SELF, "data:", "blob:", FIREBASE_STORAGE],
       "font-src": [SELF],
-      "connect-src": [SELF, IDENTITY_TOOLKIT, SECURE_TOKEN, FIRESTORE],
+      "connect-src": [SELF, IDENTITY_TOOLKIT, SECURE_TOKEN, FIRESTORE, ...(appCheck ? [APP_CHECK_API] : [])],
       // Google Maps too: the landing opens example sites, and a client-side
       // navigation into /w/… keeps this page's policy.
-      "frame-src": [...authOrigin(options.authDomain), GOOGLE_MAPS_EMBED],
+      "frame-src": [...authOrigin(options.authDomain), GOOGLE_MAPS_EMBED, ...(appCheck ? [RECAPTCHA_FRAME_FALLBACK] : [])],
       ...LOCKDOWN,
     },
     options.dev,

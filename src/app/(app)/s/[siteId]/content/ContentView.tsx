@@ -48,7 +48,7 @@ function storePrice(text: string): string | undefined {
 export function ContentView({ siteId }: { siteId: string }) {
   const site = useSite(siteId);
   return (
-    <RequireAuth allow={["anonymous", "account"]}>
+    <RequireAuth>
       <AppPage>
         {site === undefined ? (
           <div className="flex flex-1 items-center justify-center py-24 text-navy">

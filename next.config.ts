@@ -17,6 +17,7 @@ const nextConfig: NextConfig = {
     return securityHeaderRules({
       dev: process.env.NODE_ENV === "development",
       authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      appCheck: Boolean(process.env.NEXT_PUBLIC_FIREBASE_APPCHECK_SITE_KEY),
     });
   },
   // Firebase Auth's Google sign-in handler, proxied so it can run on Webbi's own

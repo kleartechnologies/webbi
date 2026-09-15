@@ -1,6 +1,8 @@
 import "server-only";
 import { FieldValue, Timestamp, type Transaction } from "firebase-admin/firestore";
 import { revalidateTag } from "next/cache";
+import { publishStanding, type PublishStanding } from "@/lib/auth/accounts";
+import { VERIFY_EMAIL_MESSAGE } from "@/lib/auth/publishing";
 import { PRICE_SEN } from "@/lib/env";
 import { adminDb } from "@/lib/firebase/admin";
 import {
@@ -211,6 +213,8 @@ export function attentionMessage(reason: PaymentAttentionReason | undefined): st
       return "We've received your payment, but that link was just taken. Choose a different one and publish again. You won't be charged twice.";
     case "site_suspended":
       return "We've received your payment, but this website can't go live right now. Please contact Webbi support.";
+    case "email_unverified":
+      return `${VERIFY_EMAIL_MESSAGE} We've received your payment and it's safe: your website goes live once you verify, and you won't be charged again.`;
     default:
       return "We've received your payment, but your website couldn't go live yet. Please contact Webbi support and we'll sort it out.";
   }
@@ -287,15 +291,36 @@ async function flagAttention(paymentId: string, reason: PaymentAttentionReason):
   });
 }
 
+/** Firebase Auth couldn't say whether the owner may publish. Transient: the payment stays paid for a retry. */
+class OwnerStandingUnavailableError extends Error {
+  constructor() {
+    super("owner account lookup unavailable");
+    this.name = "OwnerStandingUnavailableError";
+  }
+}
+
 /**
  * Step 2. Publishes the website a paid payment was for. Safe to run any number
  * of times, from any number of workers at once: it publishes at most once.
+ *
+ * The owner must be allowed to publish (a verified email, or Google sign-in),
+ * asked of Firebase Auth itself, not of any browser. Every route to a live
+ * website comes through here (callback, return page, Pay again, retry), so an
+ * unverified owner's payment is held as paid with "email_unverified" and
+ * publishes on the next attempt after they verify.
  */
 async function publishPaidPayment(paymentId: string, requestedSlug?: string): Promise<FulfilResult> {
   const db = adminDb();
   const paymentRef = db.doc(`payments/${paymentId}`);
   let siteId = "";
   let publishing = false;
+
+  // Looked up outside the transaction (it's a network call, and transactions may
+  // retry), only for a payment that still has a website to publish.
+  let standing: PublishStanding | null = null;
+  const before = await paymentRef.get();
+  const pending = before.exists ? (before.data() as PaymentDoc) : null;
+  if (pending && awaitsFulfilment(pending)) standing = await publishStanding(pending.ownerUid);
 
   try {
     return await db.runTransaction(async (tx): Promise<FulfilResult> => {
@@ -354,6 +379,14 @@ async function publishPaidPayment(paymentId: string, requestedSlug?: string): Pr
 
       // Taken down by Webbi: the money stays recorded as paid, nothing goes live.
       if (isSuspended(site)) return hold("site_suspended");
+
+      // Unverified owner: paid and kept, nothing goes live, never failed or refunded.
+      if (standing === "unverified") return hold("email_unverified");
+      // Auth unreachable, or the payment changed since it was looked up: try again later.
+      if (standing !== "allowed") {
+        publishing = true;
+        throw new OwnerStandingUnavailableError();
+      }
 
       publishing = true;
       const content = publishableContent(site.draft);

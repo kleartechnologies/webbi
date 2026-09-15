@@ -27,7 +27,7 @@ const STEP_MS = 2400;
 export function GeneratingView({ siteId }: { siteId: string }) {
   const site = useSite(siteId);
   return (
-    <RequireAuth allow={["anonymous", "account"]}>
+    <RequireAuth>
       <AppPage>
         {site === undefined ? (
           <div className="flex flex-1 items-center justify-center py-24 text-navy">
